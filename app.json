@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "dancedate-ios",
+    "name": "DanceDate",
     "slug": "dancedate-ios",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,15 +8,29 @@
     "scheme": "dancedateios",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.antho.dancedate",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "This app uses the camera to take photos for your dance profile.",
+        "NSPhotoLibraryUsageDescription": "This app accesses your photo library to select profile pictures.",
+        "NSLocationWhenInUseUsageDescription": "This app uses location to find dance events near you."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.antho.dancedate"
     },
     "web": {
       "bundler": "metro",
@@ -31,12 +45,19 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#000000"
         }
-      ]
+      ],
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "fc1e1cb9-f859-4555-b7aa-a862feb816e6"
+      }
     }
   }
 }

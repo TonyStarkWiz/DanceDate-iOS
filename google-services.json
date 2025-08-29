@@ -1,0 +1,78 @@
+{
+  "project_info": {
+    "project_number": "915121530642",
+    "project_id": "dancelinkbackend",
+    "storage_bucket": "dancelinkbackend.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:915121530642:android:249f990e5a8a67b1acf5cb",
+        "android_client_info": {
+          "package_name": "anthony.project.dancelink"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "915121530642-8i1381b7iruuat1s7f7r2tlf591heg6q.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "anthony.project.dancelink",
+            "certificate_hash": "94bbcc3d0ebcadd3d4ba67c4b178cfcad9a60e62"
+          }
+        },
+        {
+          "client_id": "915121530642-bk3ivv5f4kvmbtvi0sa6gprdciter4vq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "anthony.project.dancelink",
+            "certificate_hash": "e299d396c45afabea33ea08590204c9b8af18c84"
+          }
+        },
+        {
+          "client_id": "915121530642-f6jpfl5jmrjv1dembhh4rdhgmp9heg9k.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "anthony.project.dancelink",
+            "certificate_hash": "b2ac84b01ddd500b2b0b7e6626de4ae3ce116955"
+          }
+        },
+        {
+          "client_id": "915121530642-upe2vd4hqcap8bmmfo1qu7ss2dpnoeen.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "anthony.project.dancelink",
+            "certificate_hash": "fa59cbabb6659cebac30791138f789058d689022"
+          }
+        },
+        {
+          "client_id": "915121530642-an00opvpdvd5qpincs09v9i5p0so90a7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCDNh4HMY9YzDzqQDTvz_3RePe2-XSjabo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "915121530642-an00opvpdvd5qpincs09v9i5p0so90a7.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "915121530642-idle2ci46shv3gbo193k2vnf61rc0hdk.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.antho.dancedate"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

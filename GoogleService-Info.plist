@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>915121530642-idle2ci46shv3gbo193k2vnf61rc0hdk.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.915121530642-idle2ci46shv3gbo193k2vnf61rc0hdk</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>915121530642-8i1381b7iruuat1s7f7r2tlf591heg6q.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyDRjGnRE8cxJdL_XUkydteEuGw3A2yUDd8</string>
+	<key>GCM_SENDER_ID</key>
+	<string>915121530642</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.antho.dancedate</string>
+	<key>PROJECT_ID</key>
+	<string>dancelinkbackend</string>
+	<key>STORAGE_BUCKET</key>
+	<string>dancelinkbackend.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:915121530642:ios:e8713b8308942adfacf5cb</string>
+</dict>
+</plist>
