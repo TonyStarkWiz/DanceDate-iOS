@@ -1,101 +1,78 @@
-import { BackButton } from '@/components/ui/BackButton';
-import { useAuth } from '@/contexts/AuthContext';
-import { Chat, chatService, Message } from '@/services/chatService';
-import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  View,
+  StyleSheet,
+  SafeAreaView,
+  ActivityIndicator,
+  Text,
+  TouchableOpacity
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@/contexts/AuthContext';
+import { ChatList } from '@/components/ui/ChatList';
+import { ChatRoom } from '@/components/ui/ChatRoom';
+import { chatService } from '@/services/chatService';
+import { Toast } from '@/components/ui/Toast';
 
 export const ChatScreen: React.FC = () => {
   const { user } = useAuth();
-  const { chatId } = useLocalSearchParams<{ chatId: string }>();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [chat, setChat] = useState<Chat | null>(null);
-  const [inputText, setInputText] = useState('');
-  const [sending, setSending] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const flatListRef = useRef<FlatList>(null);
+  const [currentView, setCurrentView] = useState<'list' | 'room'>('list');
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
 
+  // Handle chat selection
+  const handleChatSelect = (chatId: string) => {
+    setSelectedChatId(chatId);
+    setCurrentView('room');
+  };
+
+  // Handle back navigation
+  const handleBack = () => {
+    if (currentView === 'room') {
+      setCurrentView('list');
+      setSelectedChatId(null);
+    }
+  };
+
+  // Check for new matches and create chats
   useEffect(() => {
-    if (chatId && user?.id) {
-      loadChat();
-      const unsubscribe = chatService.onMessages(chatId, (newMessages) => {
-        setMessages(newMessages);
-        setLoading(false);
-      });
+    if (!user?.id) return;
 
-      return unsubscribe;
-    }
-  }, [chatId, user?.id]);
-
-  const loadChat = async () => {
-    try {
-      console.log('🧪 ChatScreen: Loading chat:', chatId);
-      const chatData = await chatService.getChat(chatId!);
-      setChat(chatData);
-      
-      // Mark messages as read
-      if (user?.id) {
-        await chatService.markMessagesAsRead(chatId!, user.id);
+    const checkForNewMatches = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Get user's unread message count
+        const unreadCount = await chatService.getUnreadCount(user.id);
+        
+        if (unreadCount > 0) {
+          setToastMessage(`You have ${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`);
+          setToastType('info');
+          setShowToast(true);
+        }
+        
+      } catch (error) {
+        console.error('Error checking for new matches:', error);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error('🧪 ChatScreen: Error loading chat:', error);
-      Alert.alert('Error', 'Failed to load chat');
-    }
-  };
+    };
 
-  const sendMessage = async () => {
-    if (!inputText.trim() || !user?.id || sending) return;
+    checkForNewMatches();
+  }, [user?.id]);
 
-    setSending(true);
-    try {
-      console.log('🧪 ChatScreen: Sending message:', inputText);
-      await chatService.sendMessage(chatId!, user.id, inputText.trim());
-      setInputText('');
-    } catch (error) {
-      console.error('🧪 ChatScreen: Error sending message:', error);
-      Alert.alert('Error', 'Failed to send message');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const renderMessage = ({ item: message }: { item: Message }) => {
-    const isOwnMessage = message.senderId === user?.id;
-    
-    return (
-      <View style={[styles.messageContainer, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
-        <View style={[styles.messageBubble, isOwnMessage ? styles.ownBubble : styles.otherBubble]}>
-          <Text style={[styles.messageText, isOwnMessage ? styles.ownText : styles.otherText]}>
-            {message.text}
-          </Text>
-          <Text style={[styles.messageTime, isOwnMessage ? styles.ownTime : styles.otherTime]}>
-            {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
-        </View>
-      </View>
-    );
-  };
-
-  if (loading) {
+  if (!user) {
     return (
       <SafeAreaView style={styles.container}>
-        <BackButton />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6A11CB" />
-          <Text style={styles.loadingText}>Loading chat...</Text>
+        <View style={styles.authContainer}>
+          <Ionicons name="chatbubble-ellipses" size={64} color="#ccc" />
+          <Text style={styles.authTitle}>Sign In to Chat</Text>
+          <Text style={styles.authSubtitle}>
+            Connect with your dance partners and start conversations!
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -103,55 +80,30 @@ export const ChatScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <BackButton />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>
-          {chat ? `Chat with ${chat.participants.find(id => id !== user?.id)?.slice(0, 8)}...` : 'Chat'}
-        </Text>
-      </View>
-
-      {/* Messages */}
-      <KeyboardAvoidingView 
-        style={styles.messagesContainer} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={100}
-      >
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.messagesList}
-          showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+      {currentView === 'list' ? (
+        <ChatList
+          onChatSelect={handleChatSelect}
+          onBack={handleBack}
         />
-      </KeyboardAvoidingView>
-
-      {/* Input */}
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.textInput}
-          value={inputText}
-          onChangeText={setInputText}
-          placeholder="Type a message..."
-          placeholderTextColor="rgba(255, 255, 255, 0.6)"
-          multiline
-          maxLength={500}
+      ) : selectedChatId ? (
+        <ChatRoom
+          chatId={selectedChatId}
+          onBack={handleBack}
         />
-        <TouchableOpacity
-          style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
-          onPress={sendMessage}
-          disabled={!inputText.trim() || sending}
-        >
-          {sending ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Ionicons name="send" size={20} color="#fff" />
-          )}
-        </TouchableOpacity>
-      </View>
+      ) : (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#6A11CB" />
+          <Text style={styles.loadingText}>Loading chat...</Text>
+        </View>
+      )}
+
+      {/* Toast */}
+      <Toast
+        visible={showToast}
+        message={toastMessage}
+        type={toastType}
+        onHide={() => setShowToast(false)}
+      />
     </SafeAreaView>
   );
 };
@@ -159,18 +111,7 @@ export const ChatScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#4A148C',
-  },
-  header: {
-    alignItems: 'center',
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
+    backgroundColor: '#f8f9fa',
   },
   loadingContainer: {
     flex: 1,
@@ -178,92 +119,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    color: '#fff',
+    marginTop: 16,
     fontSize: 16,
-    marginTop: 10,
+    color: '#666',
   },
-  messagesContainer: {
+  authContainer: {
     flex: 1,
-  },
-  messagesList: {
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-  },
-  messageContainer: {
-    marginBottom: 10,
-    flexDirection: 'row',
-  },
-  ownMessage: {
-    justifyContent: 'flex-end',
-  },
-  otherMessage: {
-    justifyContent: 'flex-start',
-  },
-  messageBubble: {
-    maxWidth: '80%',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  ownBubble: {
-    backgroundColor: '#6A11CB',
-    borderBottomRightRadius: 5,
-  },
-  otherBubble: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderBottomLeftRadius: 5,
-  },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 20,
-  },
-  ownText: {
-    color: '#fff',
-  },
-  otherText: {
-    color: '#fff',
-  },
-  messageTime: {
-    fontSize: 12,
-    marginTop: 5,
-  },
-  ownTime: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    textAlign: 'right',
-  },
-  otherTime: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    textAlign: 'left',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  textInput: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    color: '#fff',
-    fontSize: 16,
-    maxHeight: 100,
-  },
-  sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#6A11CB',
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 10,
+    padding: 40,
   },
-  sendButtonDisabled: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  authTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  authSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 24,
   },
 });
 

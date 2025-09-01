@@ -10,6 +10,7 @@ import {
     where
 } from 'firebase/firestore';
 import { EventInterest, eventInterestService } from './eventInterestService';
+import { chatService } from './chatService';
 
 export interface EventBasedMatch {
   id: string;
@@ -20,6 +21,7 @@ export interface EventBasedMatch {
   matchedAt: Date;
   status: 'pending' | 'accepted' | 'declined' | 'expired';
   lastActivity: Date;
+  chatId?: string; // Link to the chat room
 }
 
 export interface EventMatchSuggestion {
@@ -32,6 +34,8 @@ export interface EventMatchSuggestion {
     name: string;
     profile?: any;
   };
+  matchId?: string; // ID of the match record
+  chatId?: string; // ID of the chat room
 }
 
 class EventBasedMatchingService {
@@ -314,6 +318,89 @@ class EventBasedMatchingService {
         averageMatchStrength: 0,
         topSharedEvents: []
       };
+    }
+  // Create a match between two users and create a chat room
+  async createMatchWithChat(userId1: string, userId2: string, sharedEvents: EventInterest[]): Promise<string> {
+    try {
+      console.log('🧪 EventBasedMatchingService: Creating match with chat for users:', userId1, userId2);
+      
+      // Calculate match strength
+      const matchStrength = this.calculateMatchStrength(sharedEvents.length, 10); // Assuming max 10 events
+      
+      // Get event names for chat
+      const eventNames = sharedEvents.map(event => event.eventName || 'Unknown Event');
+      const primaryEventName = eventNames[0] || 'shared interests';
+      const primaryEventId = sharedEvents[0]?.eventId;
+      
+      // Create match record
+      const matchData: EventBasedMatch = {
+        id: `${userId1}_${userId2}_${Date.now()}`,
+        userId1,
+        userId2,
+        sharedEvents: sharedEvents.map(event => event.eventId),
+        matchStrength,
+        matchedAt: new Date(),
+        status: 'pending',
+        lastActivity: new Date()
+      };
+      
+      // Save match to Firestore
+      await setDoc(doc(db, COLLECTIONS.EVENT_MATCHES, matchData.id), {
+        ...matchData,
+        matchedAt: serverTimestamp(),
+        lastActivity: serverTimestamp()
+      });
+      
+      // Create chat room for the match
+      const chatId = await chatService.createChatForMatch(
+        matchData.id,
+        [userId1, userId2],
+        primaryEventId,
+        primaryEventName
+      );
+      
+      // Update match with chat ID
+      await setDoc(doc(db, COLLECTIONS.EVENT_MATCHES, matchData.id), {
+        chatId,
+        lastActivity: serverTimestamp()
+      }, { merge: true });
+      
+      console.log('🧪 EventBasedMatchingService: Match created with chat ID:', chatId);
+      return chatId;
+      
+    } catch (error) {
+      console.error('🧪 EventBasedMatchingService: Error creating match with chat:', error);
+      throw error;
+    }
+  }
+
+  // Accept a match and open chat
+  async acceptMatch(matchId: string, userId: string): Promise<string | null> {
+    try {
+      console.log('🧪 EventBasedMatchingService: Accepting match:', matchId);
+      
+      const matchDoc = await getDoc(doc(db, COLLECTIONS.EVENT_MATCHES, matchId));
+      if (!matchDoc.exists()) {
+        throw new Error('Match not found');
+      }
+      
+      const matchData = matchDoc.data() as EventBasedMatch;
+      if (!matchData.participants?.includes(userId)) {
+        throw new Error('User not authorized to accept this match');
+      }
+      
+      // Update match status
+      await setDoc(doc(db, COLLECTIONS.EVENT_MATCHES, matchId), {
+        status: 'accepted',
+        lastActivity: serverTimestamp()
+      }, { merge: true });
+      
+      // Return chat ID if exists
+      return matchData.chatId || null;
+      
+    } catch (error) {
+      console.error('🧪 EventBasedMatchingService: Error accepting match:', error);
+      throw error;
     }
   }
 }

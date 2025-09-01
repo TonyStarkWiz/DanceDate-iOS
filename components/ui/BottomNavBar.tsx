@@ -7,6 +7,7 @@ import { usePathname } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { navigationManager } from './NavigationManager';
+import { chatService } from '@/services/chatService';
 
 interface NavItem {
   id: string;
@@ -23,6 +24,7 @@ export const BottomNavBar: React.FC = () => {
   const pathname = usePathname();
   const [activeTab, setActiveTab] = useState('eventList');
   const [isPremium, setIsPremium] = useState(false);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
 
   // Navigation items with context awareness
   const navItems: NavItem[] = [
@@ -55,7 +57,7 @@ export const BottomNavBar: React.FC = () => {
       icon: 'chatbubbles',
       route: '/chat',
       requiresAuth: true,
-      badge: 0
+      badge: unreadMessageCount
     },
     {
       id: 'profile',
@@ -76,7 +78,26 @@ export const BottomNavBar: React.FC = () => {
     
     // Update navigation manager
     updateNavigationContext();
+    
+    // Load unread message count
+    loadUnreadMessageCount();
   }, [pathname, user]);
+
+  // Load unread message count
+  const loadUnreadMessageCount = async () => {
+    if (!user?.id) {
+      setUnreadMessageCount(0);
+      return;
+    }
+
+    try {
+      const count = await chatService.getUnreadCount(user.id);
+      setUnreadMessageCount(count);
+    } catch (error) {
+      console.error('Error loading unread message count:', error);
+      setUnreadMessageCount(0);
+    }
+  };
 
   const checkPremiumStatus = async () => {
     try {
