@@ -44,6 +44,7 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<ExtendedUserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   
   // Initialize Firestore
   const firestore = getFirestore();
@@ -191,16 +192,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       console.log('🧪 AuthContext: Starting complete sign out process...');
       
+      // Set logout flag to prevent re-authentication
+      setIsLoggingOut(true);
+      
+      // Temporarily disable auth state listener to prevent re-authentication
+      const currentUser = user;
+      
       // Update last active timestamp before signing out
-      if (user) {
-        console.log('🧪 AuthContext: Updating last active timestamp for user:', user.id);
+      if (currentUser) {
+        console.log('🧪 AuthContext: Updating last active timestamp for user:', currentUser.id);
         try {
-          await updateDoc(doc(firestore, 'users', user.id), {
+          await updateDoc(doc(firestore, 'users', currentUser.id), {
             lastActive: serverTimestamp(),
           });
         } catch (error) {
           console.warn('🧪 AuthContext: Failed to update last active timestamp:', error);
         }
+      }
+      
+      // Clear local state first to prevent immediate re-auth
+      setUser(null);
+      
+      // Clear any cached data
+      try {
+        // Clear localStorage items
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('isPremium');
+          localStorage.removeItem('premiumPlan');
+          localStorage.removeItem('premiumExpiry');
+          localStorage.removeItem('userSession');
+          localStorage.removeItem('authToken');
+        }
+      } catch (error) {
+        console.warn('🧪 AuthContext: Error clearing localStorage:', error);
       }
       
       console.log('🧪 AuthContext: Calling Firebase signOut...');
@@ -216,11 +240,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.warn('🧪 AuthContext: Error during force signOut:', error);
       }
       
-      console.log('🧪 AuthContext: Clearing local user state...');
-      setUser(null);
-      
-      // Force a small delay to ensure state is cleared
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Force a delay to ensure state is cleared
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       console.log('🧪 AuthContext: Complete sign out process finished successfully');
     } catch (error) {
@@ -228,6 +249,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Even if there's an error, clear the local state
       setUser(null);
       throw error;
+    } finally {
+      // Clear logout flag after a delay
+      setTimeout(() => setIsLoggingOut(false), 1000);
     }
   };
 
@@ -435,6 +459,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Auth state listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      // Skip auth state changes during logout
+      if (isLoggingOut) {
+        console.log('🧪 AuthContext: Skipping auth state change during logout');
+        return;
+      }
+      
       if (firebaseUser) {
         try {
           const userData = await fetchUserData(firebaseUser);
@@ -460,14 +490,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           });
         }
       } else {
-        setUser(null);
+        // Only clear user if not logging out
+        if (!isLoggingOut) {
+          setUser(null);
+        }
       }
       setLoading(false);
     });
 
     // Cleanup subscription
     return () => unsubscribe();
-  }, []);
+  }, [isLoggingOut]);
 
   const value: AuthContextType = {
     user,

@@ -18,6 +18,7 @@ import {
     View,
 } from 'react-native';
 import { BackButton } from '../ui/BackButton';
+import { LogoutButton } from '../ui/LogoutButton';
 
 const ProfileScreen: React.FC = () => {
   const { user, signOutUser } = useAuth();
@@ -295,6 +296,9 @@ const ProfileScreen: React.FC = () => {
             <Ionicons name="star" size={16} color="#FFD700" style={{ marginRight: 8 }} />
             <Text style={styles.premiumButtonText}>Upgrade to Premium</Text>
           </TouchableOpacity>
+
+          {/* Logout Button */}
+          <LogoutButton />
         </View>
 
         {/* Posts Grid */}
