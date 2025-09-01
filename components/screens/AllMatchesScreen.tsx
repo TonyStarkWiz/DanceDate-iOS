@@ -1,7 +1,9 @@
 import { BottomNavBar } from '@/components/ui/BottomNavBar';
+import { COLLECTIONS, db } from '@/config/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -13,60 +15,6 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-
-// Mock data for matches - replace with real API calls later
-const mockMatches = [
-  {
-    id: '1',
-    name: 'Maria Rodriguez',
-    location: 'Downtown, NYC',
-    experience: 'Intermediate',
-    danceStyles: ['Salsa', 'Bachata'],
-    matchPercentage: 95,
-    lastActive: '2 hours ago',
-    imageUrl: null,
-  },
-  {
-    id: '2',
-    name: 'Carlos Mendez',
-    location: 'Brooklyn, NYC',
-    experience: 'Advanced',
-    danceStyles: ['Salsa', 'Kizomba', 'Bachata'],
-    matchPercentage: 88,
-    lastActive: '1 day ago',
-    imageUrl: null,
-  },
-  {
-    id: '3',
-    name: 'Elena Vasquez',
-    location: 'Queens, NYC',
-    experience: 'Beginner',
-    danceStyles: ['Salsa'],
-    matchPercentage: 82,
-    lastActive: '3 days ago',
-    imageUrl: null,
-  },
-  {
-    id: '4',
-    name: 'David Kim',
-    location: 'Manhattan, NYC',
-    experience: 'Intermediate',
-    danceStyles: ['West Coast Swing', 'Hustle'],
-    matchPercentage: 78,
-    lastActive: '1 week ago',
-    imageUrl: null,
-  },
-  {
-    id: '5',
-    name: 'Sophia Chen',
-    location: 'Bronx, NYC',
-    experience: 'Advanced',
-    danceStyles: ['Argentine Tango', 'Waltz'],
-    matchPercentage: 91,
-    lastActive: '5 hours ago',
-    imageUrl: null,
-  },
-];
 
 interface Match {
   id: string;
@@ -81,24 +29,134 @@ interface Match {
 
 export const AllMatchesScreen: React.FC = () => {
   const { user } = useAuth();
-  const [matches, setMatches] = useState<Match[]>(mockMatches);
+  const [matches, setMatches] = useState<Match[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate loading
-    const timer = setTimeout(() => {
+    if (user?.id) {
+      loadMatches();
+    }
+  }, [user?.id]);
+
+  const loadMatches = async () => {
+    try {
+      setIsLoading(true);
+      console.log('🧪 AllMatchesScreen: Loading matches for user:', user?.id);
+      
+      if (!user?.id) {
+        console.log('🧪 AllMatchesScreen: No user ID, skipping load');
+        return;
+      }
+
+      // Step 1: Get all event interests
+      console.log('🧪 AllMatchesScreen: Getting all event interests...');
+      const allInterestsSnapshot = await getDocs(collection(db, COLLECTIONS.EVENT_INTERESTS));
+      const allInterests = allInterestsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      console.log('🧪 AllMatchesScreen: Found', allInterests.length, 'total interests');
+
+      // Step 2: Get current user's interests
+      console.log('🧪 AllMatchesScreen: Getting user interests...');
+      const userInterestsQuery = query(
+        collection(db, COLLECTIONS.EVENT_INTERESTS),
+        where('userId', '==', user.id)
+      );
+      const userInterestsSnapshot = await getDocs(userInterestsQuery);
+      const userInterests = userInterestsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      console.log('🧪 AllMatchesScreen: User has', userInterests.length, 'interests');
+
+      if (userInterests.length === 0) {
+        console.log('🧪 AllMatchesScreen: No user interests found');
+        setMatches([]);
+        return;
+      }
+
+      // Step 3: Find other users interested in the same events
+      console.log('🧪 AllMatchesScreen: Finding matching users...');
+      const userEventIds = userInterests.map(interest => interest.eventId);
+      console.log('🧪 AllMatchesScreen: User interested in events:', userEventIds);
+
+      const matchingUsers = new Map<string, { userId: string; sharedEvents: string[]; matchCount: number }>();
+
+      // Find all interests for the same events
+      allInterests.forEach(interest => {
+        if (interest.userId !== user.id && userEventIds.includes(interest.eventId)) {
+          const existing = matchingUsers.get(interest.userId);
+          if (existing) {
+            existing.sharedEvents.push(interest.eventTitle);
+            existing.matchCount++;
+          } else {
+            matchingUsers.set(interest.userId, {
+              userId: interest.userId,
+              sharedEvents: [interest.eventTitle],
+              matchCount: 1
+            });
+          }
+        }
+      });
+
+      console.log('🧪 AllMatchesScreen: Found', matchingUsers.size, 'matching users');
+
+      // Step 4: Get user details for matches
+      console.log('🧪 AllMatchesScreen: Getting user details...');
+      const transformedMatches: Match[] = [];
+
+      for (const [userId, matchData] of matchingUsers) {
+        try {
+          // Get user details from users collection
+          const userQuery = query(collection(db, COLLECTIONS.USERS), where('__name__', '==', userId));
+          const userSnapshot = await getDocs(userQuery);
+          
+          if (!userSnapshot.empty) {
+            const userData = userSnapshot.docs[0].data();
+            transformedMatches.push({
+              id: userId,
+              name: userData.name || userData.displayName || 'Unknown User',
+              location: userData.location || 'Location not available',
+              experience: userData.experience || 'Experience not available',
+              danceStyles: matchData.sharedEvents, // Use shared events as dance styles
+              matchPercentage: Math.min(matchData.matchCount * 25, 100), // Calculate match percentage
+              lastActive: 'Recently',
+              imageUrl: userData.profilePicture || null,
+            });
+          } else {
+            // Fallback: create match with just the ID
+            transformedMatches.push({
+              id: userId,
+              name: 'Unknown User',
+              location: 'Location not available',
+              experience: 'Experience not available',
+              danceStyles: matchData.sharedEvents,
+              matchPercentage: Math.min(matchData.matchCount * 25, 100),
+              lastActive: 'Recently',
+              imageUrl: null,
+            });
+          }
+        } catch (error) {
+          console.error('🧪 AllMatchesScreen: Error getting user details for', userId, error);
+        }
+      }
+
+      setMatches(transformedMatches);
+      console.log('🧪 AllMatchesScreen: Set', transformedMatches.length, 'matches');
+      
+    } catch (error) {
+      console.error('🧪 AllMatchesScreen: Error loading matches:', error);
+    } finally {
       setIsLoading(false);
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, []);
+    }
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // Simulate API call
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
+    await loadMatches();
+    setRefreshing(false);
   };
 
   const handleMatchPress = (match: Match) => {
@@ -479,3 +537,6 @@ const styles = StyleSheet.create({
   },
 });
 
+
+import { BackButton } from '../ui/BackButton';
+      <BackButton />

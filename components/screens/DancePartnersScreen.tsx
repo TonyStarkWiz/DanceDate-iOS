@@ -1,64 +1,18 @@
+import { useAuth } from '@/contexts/AuthContext';
+import { eventBasedMatchingService } from '@/services/eventBasedMatchingService';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
+    ActivityIndicator,
     Image,
     RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
-
-// Mock data for dance partners - replace with real API calls later
-const mockPartners = [
-  {
-    id: '1',
-    name: 'Maria Rodriguez',
-    imageUrl: null,
-    eventTitle: 'Salsa Night at Latin Club',
-    matchTimestamp: Date.now() - 3600000, // 1 hour ago
-    danceStyle: 'Salsa',
-    location: 'Downtown',
-    bio: 'Professional salsa dancer with 8 years of experience. Love teaching beginners!',
-    interests: ['Salsa', 'Bachata', 'Social Dancing'],
-  },
-  {
-    id: '2',
-    name: 'Carlos Mendez',
-    imageUrl: null,
-    eventTitle: 'Bachata Workshop',
-    matchTimestamp: Date.now() - 7200000, // 2 hours ago
-    danceStyle: 'Bachata',
-    location: 'West Side',
-    bio: 'Bachata enthusiast and instructor. Passionate about sensual moves and connection.',
-    interests: ['Bachata', 'Kizomba', 'Latin Music'],
-  },
-  {
-    id: '3',
-    name: 'Ana Silva',
-    imageUrl: null,
-    eventTitle: 'Kizomba Social',
-    matchTimestamp: Date.now() - 10800000, // 3 hours ago
-    danceStyle: 'Kizomba',
-    location: 'African Dance Center',
-    bio: 'Kizomba dancer and cultural ambassador. Bringing African rhythms to the dance floor.',
-    interests: ['Kizomba', 'African Dance', 'Cultural Exchange'],
-  },
-  {
-    id: '4',
-    name: 'James Wilson',
-    imageUrl: null,
-    eventTitle: 'Ballroom Basics',
-    matchTimestamp: Date.now() - 14400000, // 4 hours ago
-    danceStyle: 'Ballroom',
-    location: 'Grand Ballroom',
-    bio: 'Ballroom dance instructor specializing in waltz, foxtrot, and tango.',
-    interests: ['Ballroom', 'Classical Music', 'Formal Dancing'],
-  },
-];
 
 interface DancePartner {
   id: string;
@@ -73,23 +27,64 @@ interface DancePartner {
 }
 
 export const DancePartnersScreen: React.FC = () => {
-  const [partners, setPartners] = useState<DancePartner[]>(mockPartners);
+  const { user } = useAuth();
+  const [partners, setPartners] = useState<DancePartner[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<string>('All');
+  const [isLoading, setIsLoading] = useState(true);
 
   const danceStyles = ['All', 'Salsa', 'Bachata', 'Kizomba', 'Ballroom', 'Hip Hop', 'Contemporary'];
 
   useEffect(() => {
-    // Load dance partners from API here
-    console.log('DancePartnersScreen mounted');
-  }, []);
+    if (user?.id) {
+      loadPartners();
+    }
+  }, [user?.id]);
+
+  const loadPartners = async () => {
+    try {
+      setIsLoading(true);
+      console.log('🧪 DancePartnersScreen: Loading partners for user:', user?.id);
+      
+      if (!user?.id) {
+        console.log('🧪 DancePartnersScreen: No user ID, skipping load');
+        return;
+      }
+
+      // Get event-based matches from Firestore
+      const eventMatches = await eventBasedMatchingService.findEventBasedMatches(user.id, 20);
+      console.log('🧪 DancePartnersScreen: Found', eventMatches.length, 'event-based matches');
+      
+      // Transform Firestore data to DancePartner interface
+      const transformedPartners: DancePartner[] = eventMatches.map((match, index) => {
+        const sharedEvent = match.sharedEvents[0]; // Get the first shared event
+        return {
+          id: match.userId,
+          name: match.potentialPartner.name || 'Unknown User',
+          imageUrl: null,
+          eventTitle: sharedEvent?.eventTitle || 'Shared Event Interest',
+          matchTimestamp: Date.now() - (index * 3600000), // Simulate different timestamps
+          danceStyle: match.commonInterests[0] || 'Dance',
+          location: 'Location not available',
+          bio: `Matched based on shared interest in ${match.sharedEvents.length} events.`,
+          interests: match.commonInterests || [],
+        };
+      });
+
+      setPartners(transformedPartners);
+      console.log('🧪 DancePartnersScreen: Set', transformedPartners.length, 'partners');
+      
+    } catch (error) {
+      console.error('🧪 DancePartnersScreen: Error loading partners:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // Simulate API call
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
+    await loadPartners();
+    setRefreshing(false);
   };
 
   const handlePartnerPress = (partner: DancePartner) => {
@@ -112,20 +107,8 @@ export const DancePartnersScreen: React.FC = () => {
 
   const handleFilterChange = (style: string) => {
     setSelectedFilter(style);
-    if (style === 'All') {
-      setPartners(mockPartners);
-    } else {
-      const filtered = mockPartners.filter(partner => partner.danceStyle === style);
-      setPartners(filtered);
-    }
-  };
-
-  const handleCreateTestMatch = () => {
-    Alert.alert(
-      'Create Test Match',
-      'This would create a test match in a real app. For now, it\'s just a demo.',
-      [{ text: 'OK' }]
-    );
+    // Filtering will be handled by the component state
+    // The actual filtering logic will be applied to the real data
   };
 
   const handleBrowseEvents = () => {
@@ -188,7 +171,13 @@ export const DancePartnersScreen: React.FC = () => {
 
       {/* Content Area */}
       <View style={styles.content}>
-        {partners.length === 0 ? (
+        {isLoading ? (
+          // Loading state
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="large" color="#6A11CB" />
+            <Text style={styles.loadingText}>Loading dance partners...</Text>
+          </View>
+        ) : partners.length === 0 ? (
           // Empty state
           <View style={styles.emptyState}>
             <Ionicons name="heart" size={64} color="rgba(255, 255, 255, 0.5)" />
@@ -196,11 +185,6 @@ export const DancePartnersScreen: React.FC = () => {
             <Text style={styles.emptyStateText}>
               Start browsing events to find dance partners!
             </Text>
-            
-            {/* Test Button */}
-            <TouchableOpacity style={styles.testButton} onPress={handleCreateTestMatch}>
-              <Text style={styles.testButtonText}>🧪 Create Test Match</Text>
-            </TouchableOpacity>
             
             <TouchableOpacity style={styles.browseButton} onPress={handleBrowseEvents}>
               <Text style={styles.browseButtonText}>Browse Events</Text>
@@ -508,5 +492,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#ccc',
   },
+  loadingState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginTop: 16,
+  },
 });
 
+
+import { BackButton } from '../ui/BackButton';
+      <BackButton />

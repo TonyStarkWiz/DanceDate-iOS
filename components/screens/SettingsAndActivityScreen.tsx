@@ -13,6 +13,7 @@ import {
 
 export const SettingsAndActivityScreen: React.FC = () => {
   const { signOutUser } = useAuth();
+  const [isSigningOut, setIsSigningOut] = React.useState(false);
 
   const handleBackPress = () => {
     router.back();
@@ -56,10 +57,34 @@ export const SettingsAndActivityScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
+              setIsSigningOut(true);
+              console.log('🧪 Starting sign out process...');
               await signOutUser();
-              // Navigation will be handled by AuthContext
+              console.log('🧪 Sign out completed successfully');
+              
+              // Show success message
+              Alert.alert(
+                'Signed Out',
+                'You have been successfully signed out.',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      // Force navigation to welcome screen
+                      router.replace('/welcome');
+                    }
+                  }
+                ]
+              );
             } catch (error) {
-              Alert.alert('Error', 'Failed to sign out. Please try again.');
+              console.error('🧪 Sign out error:', error);
+              Alert.alert(
+                'Sign Out Error', 
+                'Failed to sign out. Please try again.',
+                [{ text: 'OK' }]
+              );
+            } finally {
+              setIsSigningOut(false);
             }
           },
         },
@@ -126,9 +151,15 @@ export const SettingsAndActivityScreen: React.FC = () => {
         <View style={styles.spacer} />
 
         {/* Sign Out Button */}
-        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+        <TouchableOpacity 
+          style={[styles.signOutButton, isSigningOut && styles.signOutButtonDisabled]} 
+          onPress={handleSignOut}
+          disabled={isSigningOut}
+        >
           <Ionicons name="log-out-outline" size={24} color="#ff4757" />
-          <Text style={styles.signOutText}>Log Out</Text>
+          <Text style={styles.signOutText}>
+            {isSigningOut ? 'Signing Out...' : 'Log Out'}
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -217,4 +248,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 12,
   },
+  signOutButtonDisabled: {
+    opacity: 0.6,
+  },
 });
+
+import { BackButton } from '../ui/BackButton';
+      <BackButton />

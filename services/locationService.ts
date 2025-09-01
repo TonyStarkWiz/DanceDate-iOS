@@ -1,220 +1,218 @@
-import * as Location from 'expo-location';
+// Location Services for Web Version
+// Mirrors the Android app's sophisticated location handling
 
-// Location Service Initializer (ported from Android LocationServiceInitializer.kt)
-export class LocationServiceInitializer {
-  private static instance: LocationServiceInitializer;
-  private locationPermission: Location.PermissionStatus | null = null;
+export interface LocationData {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+  locationName?: string;
+  postalCode?: string;
+  country?: string;
+  city?: string;
+  state?: string;
+}
 
-  private constructor() {}
+export interface PostalCodeData {
+  code: string;
+  country: string;
+  isValid: boolean;
+  locationName?: string;
+}
 
-  public static getInstance(): LocationServiceInitializer {
-    if (!LocationServiceInitializer.instance) {
-      LocationServiceInitializer.instance = new LocationServiceInitializer();
+// GPS Location Detection
+export class LocationService {
+  private static instance: LocationService;
+  private defaultLocation: LocationData = {
+    latitude: 27.6648, // Orlando, FL
+    longitude: -81.5158,
+    locationName: 'Orlando, FL',
+    country: 'US'
+  };
+
+  static getInstance(): LocationService {
+    if (!LocationService.instance) {
+      LocationService.instance = new LocationService();
     }
-    return LocationServiceInitializer.instance;
+    return LocationService.instance;
   }
 
-  // Check if location services are available (Android equivalent)
-  public async isLocationServicesAvailable(): Promise<boolean> {
+  // Primary GPS method - mirrors Android's SmartLocationHandler
+  async getCurrentLocation(): Promise<LocationData> {
     try {
-      // Check if location services are enabled
-      const isEnabled = await Location.hasServicesEnabledAsync();
-      if (!isEnabled) {
-        console.log('🧪 Location services are disabled');
-        return false;
-      }
-
-      // Check permissions
-      const { status } = await Location.getForegroundPermissionsAsync();
-      this.locationPermission = status;
+      console.log('🧪 LocationService: Getting current location via GPS...');
       
-      return status === Location.PermissionStatus.GRANTED;
-    } catch (error) {
-      console.error('🧪 Error checking location services:', error);
-      return false;
-    }
-  }
-
-  // Safe location service initialization (matches Android implementation)
-  public async initializeLocationServices(): Promise<boolean> {
-    try {
-      // Check if location services are available
-      if (!(await this.isLocationServicesAvailable())) {
-        console.log('🧪 Location services not available');
-        return false;
+      if (!navigator.geolocation) {
+        console.log('🧪 LocationService: Geolocation not supported, using fallback');
+        return this.getFallbackLocation();
       }
 
-      // Request permissions if not granted
-      if (this.locationPermission !== Location.PermissionStatus.GRANTED) {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        this.locationPermission = status;
-        
-        if (status !== Location.PermissionStatus.GRANTED) {
-          console.log('🧪 Location permission denied');
-          return false;
-        }
-      }
-
-      // Test location accuracy
-      const accuracy = await this.getLocationAccuracy();
-      console.log('🧪 Location accuracy:', accuracy);
+      const position = await this.getGeolocationPosition();
       
-      return true;
-    } catch (error) {
-      console.error('🧪 Error initializing location services:', error);
-      return false;
-    }
-  }
-
-  // Get current location with high accuracy
-  public async getCurrentLocation(): Promise<Location.LocationObject | null> {
-    try {
-      if (!(await this.isLocationServicesAvailable())) {
-        throw new Error('Location services not available');
-      }
-
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-        timeInterval: 10000, // 10 seconds
-        distanceInterval: 10, // 10 meters
-      });
-
-      return location;
-    } catch (error) {
-      console.error('🧪 Error getting current location:', error);
-      return null;
-    }
-  }
-
-  // Get location accuracy (Android equivalent)
-  private async getLocationAccuracy(): Promise<string> {
-    try {
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-        timeInterval: 5000,
-        distanceInterval: 5,
-      });
-
-      if (location.coords.accuracy && location.coords.accuracy <= 5) {
-        return 'HIGH';
-      } else if (location.coords.accuracy && location.coords.accuracy <= 20) {
-        return 'MEDIUM';
-      } else {
-        return 'LOW';
-      }
-    } catch (error) {
-      return 'UNKNOWN';
-    }
-  }
-
-  // Watch location changes
-  public async watchLocation(
-    callback: (location: Location.LocationObject) => void,
-    options: {
-      accuracy?: Location.Accuracy;
-      timeInterval?: number;
-      distanceInterval?: number;
-    } = {}
-  ): Promise<() => void> {
-    try {
-      if (!(await this.isLocationServicesAvailable())) {
-        throw new Error('Location services not available');
-      }
-
-      const defaultOptions = {
-        accuracy: Location.Accuracy.Balanced,
-        timeInterval: 10000,
-        distanceInterval: 10,
-        ...options,
-      };
-
-      const subscription = await Location.watchPositionAsync(
-        defaultOptions,
-        callback
-      );
-
-      // Return unsubscribe function
-      return () => subscription.remove();
-    } catch (error) {
-      console.error('🧪 Error watching location:', error);
-      return () => {}; // Return empty function if error
-    }
-  }
-
-  // Get location from coordinates (reverse geocoding)
-  public async getLocationFromCoordinates(
-    latitude: number,
-    longitude: number
-  ): Promise<{
-    city?: string;
-    state?: string;
-    country?: string;
-    address?: string;
-  }> {
-    try {
-      const reverseGeocode = await Location.reverseGeocodeAsync({
-        latitude,
-        longitude,
-      });
-
-      if (reverseGeocode.length > 0) {
-        const location = reverseGeocode[0];
-        return {
-          city: location.city,
-          state: location.region,
-          country: location.country,
-          address: `${location.street}, ${location.city}, ${location.region}`,
+      // Validate location (ensure it's in target regions, not Berlin, etc.)
+      if (this.isValidLocation(position.coords.latitude, position.coords.longitude)) {
+        const locationData: LocationData = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          locationName: await this.reverseGeocode(position.coords.latitude, position.coords.longitude)
         };
+        
+        console.log('🧪 LocationService: GPS location obtained:', locationData);
+        return locationData;
+      } else {
+        console.log('🧪 LocationService: Invalid location detected, using fallback');
+        return this.getFallbackLocation();
       }
-
-      return {};
     } catch (error) {
-      console.error('🧪 Error reverse geocoding:', error);
-      return {};
+      console.error('🧪 LocationService: GPS error:', error);
+      return this.getFallbackLocation();
     }
   }
 
-  // Calculate distance between two coordinates
-  public calculateDistance(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number
-  ): number {
-    const R = 6371; // Earth's radius in kilometers
-    const dLat = this.deg2rad(lat2 - lat1);
-    const dLon = this.deg2rad(lon2 - lon1);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(this.deg2rad(lat1)) *
-        Math.cos(this.deg2rad(lat2)) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const distance = R * c; // Distance in kilometers
-    return distance;
+  private getGeolocationPosition(): Promise<GeolocationPosition> {
+    return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Location request timeout'));
+      }, 5000); // 5 second timeout like Android
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          clearTimeout(timeoutId);
+          resolve(position);
+        },
+        (error) => {
+          clearTimeout(timeoutId);
+          reject(error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 300000 // 5 minutes
+        }
+      );
+    });
   }
 
-  private deg2rad(deg: number): number {
-    return deg * (Math.PI / 180);
-  }
-
-  // Check if location permission is granted
-  public isLocationPermissionGranted(): boolean {
-    return this.locationPermission === Location.PermissionStatus.GRANTED;
-  }
-
-  // Request location permissions
-  public async requestLocationPermissions(): Promise<boolean> {
+  // Fallback location method - mirrors Android's FallbackLocationHandler
+  private async getFallbackLocation(): Promise<LocationData> {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      this.locationPermission = status;
-      return status === Location.PermissionStatus.GRANTED;
+      console.log('🧪 LocationService: Using IP-based fallback location...');
+      
+      // Try IP-based geolocation
+      const response = await fetch('https://ipapi.co/json/');
+      const data = await response.json();
+      
+      if (data.latitude && data.longitude) {
+        const locationData: LocationData = {
+          latitude: data.latitude,
+          longitude: data.longitude,
+          locationName: `${data.city}, ${data.region}`,
+          country: data.country_code,
+          city: data.city,
+          state: data.region
+        };
+        
+        console.log('🧪 LocationService: IP-based location obtained:', locationData);
+        return locationData;
+      }
     } catch (error) {
-      console.error('🧪 Error requesting location permissions:', error);
-      return false;
+      console.error('🧪 LocationService: IP geolocation failed:', error);
+    }
+    
+    console.log('🧪 LocationService: Using default Orlando location');
+    return this.defaultLocation;
+  }
+
+  // Location validation - ensures location is in target regions
+  private isValidLocation(lat: number, lng: number): boolean {
+    // Check if location is in reasonable bounds (not Berlin, etc.)
+    // US bounds: roughly 24-71 lat, -180 to -66 lng
+    if (lat >= 24 && lat <= 71 && lng >= -180 && lng <= -66) {
+      return true;
+    }
+    
+    // Add other valid regions as needed
+    return false;
+  }
+
+  // Simple reverse geocoding
+  private async reverseGeocode(lat: number, lng: number): Promise<string> {
+    try {
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${process.env.GOOGLE_MAPS_API_KEY}`
+      );
+      const data = await response.json();
+      
+      if (data.results && data.results[0]) {
+        return data.results[0].formatted_address;
+      }
+    } catch (error) {
+      console.error('🧪 LocationService: Reverse geocoding failed:', error);
+    }
+    
+    // Fallback to coordinate-based location name
+    return this.getLocationNameFromCoordinates(lat, lng);
+  }
+
+  private getLocationNameFromCoordinates(lat: number, lng: number): string {
+    // Simplified location name based on coordinates
+    if (lat > 40 && lat < 45 && lng > -80 && lng < -70) return 'New York';
+    if (lat > 30 && lat < 35 && lng > -120 && lng < -110) return 'Los Angeles';
+    if (lat > 40 && lat < 45 && lng > -90 && lng < -80) return 'Chicago';
+    if (lat > 25 && lat < 30 && lng > -85 && lng < -75) return 'Florida';
+    return 'United States';
+  }
+}
+
+// Smart Postal Code System - mirrors Android's PostalCodeValidator
+export class PostalCodeValidator {
+  private static countryConfigs = {
+    US: { pattern: /^\d{5}$/, name: 'United States' },
+    UK: { pattern: /^[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}$/i, name: 'United Kingdom' },
+    DE: { pattern: /^\d{5}$/, name: 'Germany' },
+    CA: { pattern: /^[A-Z]\d[A-Z]\s?\d[A-Z]\d$/i, name: 'Canada' },
+    FR: { pattern: /^\d{5}$/, name: 'France' },
+    IT: { pattern: /^\d{5}$/, name: 'Italy' },
+    ES: { pattern: /^\d{5}$/, name: 'Spain' },
+    NL: { pattern: /^\d{4}\s?[A-Z]{2}$/i, name: 'Netherlands' },
+    AU: { pattern: /^\d{4}$/, name: 'Australia' },
+    // Add more countries as needed
+  };
+
+  static validatePostalCode(code: string, country: string): { isValid: boolean; message: string } {
+    const config = this.countryConfigs[country as keyof typeof this.countryConfigs];
+    
+    if (!config) {
+      return { isValid: false, message: 'Unsupported country' };
+    }
+
+    const isValid = config.pattern.test(code);
+    const message = isValid ? 'Valid postal code' : `Invalid format for ${config.name}`;
+    
+    return { isValid, message };
+  }
+
+  static getSupportedCountries(): Array<{ code: string; name: string }> {
+    return Object.entries(this.countryConfigs).map(([code, config]) => ({
+      code,
+      name: config.name
+    }));
+  }
+
+  static formatPostalCode(code: string, country: string): string {
+    // Add formatting logic for different countries
+    switch (country) {
+      case 'US':
+        return code.replace(/(\d{5})/, '$1');
+      case 'UK':
+        return code.toUpperCase().replace(/([A-Z]{1,2})(\d[A-Z\d]?)\s?(\d[A-Z]{2})/, '$1 $2 $3');
+      case 'CA':
+        return code.toUpperCase().replace(/([A-Z]\d[A-Z])\s?(\d[A-Z]\d)/, '$1 $2');
+      default:
+        return code;
     }
   }
 }
 
-export default LocationServiceInitializer.getInstance();
+// Export singleton instance
+export const locationService = LocationService.getInstance();

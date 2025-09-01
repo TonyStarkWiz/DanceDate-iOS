@@ -2,12 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
+import { BackButton } from '../ui/BackButton';
 
-// Platform-specific imports
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+// Temporarily removed Google Sign-In imports to fix native module error
+// import { GoogleSignin } from '@react-native-google-signin/google-signin';
+// import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 const { width, height } = Dimensions.get('window');
 
@@ -16,47 +17,30 @@ const WelcomeScreen: React.FC = () => {
   const shimmerTranslateX = useRef(new Animated.Value(-200)).current;
   const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
 
-  // Configure Google Sign-In once
-  useEffect(() => {
-    if (Platform.OS === 'android' || Platform.OS === 'ios') {
-      GoogleSignin.configure({
-        webClientId: '915121530642-kumscbkiupu4ail03c437froeprk099t.apps.googleusercontent.com', // Your web client ID
-        offlineAccess: true,
-      });
-    }
-  }, []);
+  // Temporarily disabled Google Sign-In configuration
+  // useEffect(() => {
+  //   if (Platform.OS === 'android' || Platform.OS === 'ios') {
+  //     GoogleSignin.configure({
+  //       webClientId: '915121530642-kumscbkiupu4ail03c437froeprk099t.apps.googleusercontent.com',
+  //       offlineAccess: true,
+  //     });
+  //   }
+  // }, []);
 
   const handleGoogleSignIn = async () => {
     try {
       setIsGoogleSigningIn(true);
       
-      if (Platform.OS === 'android' || Platform.OS === 'ios') {
-        // Mobile path - use React Native Google Sign-In
-        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-        const userInfo = await GoogleSignin.signIn();
-        
-        // For mobile, we'll get the user info directly
-        // The AuthContext should handle the authentication
-        console.log('Mobile Google Sign-In successful:', userInfo);
-        // Navigate to post-login welcome
+      // Show message about Google Sign-In being temporarily disabled
+      alert('Google Sign-In requires a development build. Please use email/password authentication for now, or run: npx eas build --profile development --platform ios');
+      
+      // For now, just navigate to post-login welcome for testing
+      setTimeout(() => {
         router.push('/postLoginWelcome');
-      } else {
-        // Web path - use Firebase Auth
-        const auth = getAuth();
-        const provider = new GoogleAuthProvider();
-        const result = await signInWithPopup(auth, provider);
-        
-        if (result.user) {
-          // For web, we can directly use the user object
-          // The AuthContext should handle this automatically via onAuthStateChanged
-          router.push('/postLoginWelcome');
-        } else {
-          throw new Error('No user received from Firebase Google Sign-In');
-        }
-      }
+      }, 1000);
       
     } catch (error: any) {
-      console.error('Google Sign-In failed:', error);
+      console.error('🧪 Google Sign-In failed:', error);
       alert(`Google Sign-In failed: ${error.message || 'Unknown error'}`);
     } finally {
       setIsGoogleSigningIn(false);
@@ -90,6 +74,7 @@ const WelcomeScreen: React.FC = () => {
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
     >
+      <BackButton />
       {/* Status Bar Placeholder */}
       <View style={styles.statusBar}>
         <Text style={styles.statusBarText}>6:42</Text>
@@ -148,7 +133,7 @@ const WelcomeScreen: React.FC = () => {
 
                                 <TouchableOpacity 
              style={styles.secondaryButton}
-             onPress={() => router.push('/login')}
+             onPress={() => router.push('/signin')}
            >
              <Text style={styles.secondaryButtonText}>Log In with Email</Text>
            </TouchableOpacity>
@@ -158,6 +143,13 @@ const WelcomeScreen: React.FC = () => {
              onPress={() => router.push('/create_account')}
            >
              <Text style={styles.primaryButtonText}>Create Account</Text>
+           </TouchableOpacity>
+
+           <TouchableOpacity 
+             style={styles.secondaryButton}
+             onPress={() => router.push('/premium')}
+           >
+             <Text style={styles.secondaryButtonText}>View Premium Plans</Text>
            </TouchableOpacity>
 
            <TouchableOpacity style={styles.secondaryButton}>

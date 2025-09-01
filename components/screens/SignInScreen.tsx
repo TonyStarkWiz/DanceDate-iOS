@@ -14,6 +14,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { BackButton } from '../ui/BackButton';
 
 const SignInScreen: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -23,7 +24,7 @@ const SignInScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [rememberCredentials, setRememberCredentials] = useState(false);
   
-  const { signIn, signInWithGoogle, user, loading } = useAuth();
+  const { signIn, user, loading } = useAuth();
 
   // Load saved credentials on mount
   useEffect(() => {
@@ -44,7 +45,7 @@ const SignInScreen: React.FC = () => {
         setRememberCredentials(true);
       }
     } catch (error) {
-      console.log('Error loading saved credentials:', error);
+      console.log('🧪 Error loading saved credentials:', error);
     }
   };
 
@@ -54,14 +55,14 @@ const SignInScreen: React.FC = () => {
         await AsyncStorage.setItem('savedEmail', email);
         await AsyncStorage.setItem('savedPassword', password);
       } catch (error) {
-        console.log('Error saving credentials:', error);
+        console.log('🧪 Error saving credentials:', error);
       }
     } else {
       try {
         await AsyncStorage.removeItem('savedEmail');
         await AsyncStorage.removeItem('savedPassword');
       } catch (error) {
-        console.log('Error removing credentials:', error);
+        console.log('🧪 Error removing credentials:', error);
       }
     }
   };
@@ -74,149 +75,52 @@ const SignInScreen: React.FC = () => {
 
     setIsLoading(true);
     try {
+      console.log('🧪 Attempting sign in with email:', email);
       await signIn(email, password);
+      console.log('🧪 Sign in successful');
+      
       // Since signIn doesn't return a boolean, we'll assume success if no error is thrown
       await saveCredentials();
+      
       // Update user profile if username is provided
       if (username.trim()) {
-        // TODO: Implement Cloud Functions call to updateUserProfile
         console.log('🧪 Updating user profile with username:', username);
+        // TODO: Implement profile update
       }
+      
+      console.log('🧪 Navigating to post login welcome');
       router.replace('/postLoginWelcome');
-    } catch (error) {
-      Alert.alert('Sign In Error', 'Invalid email or password');
+    } catch (error: any) {
+      console.error('🧪 Sign in error:', error);
+      let errorMessage = 'Invalid email or password';
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email';
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = 'Incorrect password';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many failed attempts. Please try again later';
+      }
+      
+      Alert.alert('Sign In Error', errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleGoogleSignIn = async () => {
-    try {
-      setIsLoading(true);
-      
-      console.log('🧪 Starting Google Sign-In process...');
-      
-      // Import the service dynamically to avoid build issues
-      const { default: googleSignInService } = await import('@/services/googleSignIn');
-      
-      console.log('🧪 Google Sign-In service imported successfully');
-      
-      // Check if Google Play Services are available
-      const isAvailable = await googleSignInService.isGooglePlayServicesAvailable();
-      console.log('🧪 Google Play Services available:', isAvailable);
-      
-      if (!isAvailable) {
-        Alert.alert('Error', 'Google Play Services not available');
-        return;
-      }
-
-      // Sign in with Google
-      console.log('🧪 Attempting Google Sign-In...');
-      const { idToken } = await googleSignInService.signIn();
-      console.log('🧪 Google Sign-In successful, got ID token');
-      
-      // Use the AuthContext to complete the sign-in
-      console.log('🧪 Calling signInWithGoogle with ID token...');
-      await signInWithGoogle(idToken);
-      console.log('🧪 signInWithGoogle completed successfully');
-      
-      // Show success alert
-      Alert.alert(
-        '🎉 Success!', 
-        'Google Sign-In completed successfully!\n\nUser is now logged in.',
-        [
-          {
-            text: 'Continue',
-            onPress: () => router.replace('/postLoginWelcome')
-          }
-        ]
-      );
-      
-    } catch (error: any) {
-      console.error('🧪 Google Sign-In error:', error);
-      
-      // Create comprehensive error information
-      const errorInfo = {
-        message: error.message || 'No error message',
-        code: error.code || 'No error code',
-        name: error.name || 'No error name',
-        stack: error.stack || 'No stack trace',
-        toString: error.toString(),
-        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
-        timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent,
-        url: window.location.href,
-        authState: {
-          user: user ? 'EXISTS' : 'NULL',
-          loading: loading,
-          hasGoogleService: 'Will check...'
+    Alert.alert(
+      'Google Sign-In Temporarily Disabled',
+      'Google Sign-In requires a development build. Please use email/password authentication for now, or run: npx eas build --profile development --platform ios',
+      [
+        {
+          text: 'OK',
+          onPress: () => console.log('🧪 User acknowledged Google Sign-In disabled message')
         }
-      };
-      
-      // Check if Google Sign-In service exists
-      try {
-        const { default: googleSignInService } = await import('@/services/googleSignIn');
-        errorInfo.authState.hasGoogleService = 'YES';
-      } catch (importError) {
-        errorInfo.authState.hasGoogleService = 'NO - Import failed';
-      }
-      
-      // Show comprehensive error alert
-      Alert.alert(
-        '🚨 COMPREHENSIVE ERROR REPORT', 
-        `=== GOOGLE SIGN-IN FAILURE ===\n\n` +
-        `📱 Error Details:\n` +
-        `• Message: ${errorInfo.message}\n` +
-        `• Code: ${errorInfo.code}\n` +
-        `• Name: ${errorInfo.name}\n` +
-        `• Time: ${errorInfo.timestamp}\n\n` +
-        `🌐 Environment:\n` +
-        `• URL: ${errorInfo.url}\n` +
-        `• User Agent: ${errorInfo.userAgent.substring(0, 50)}...\n\n` +
-        `🔐 Auth State:\n` +
-        `• User: ${errorInfo.authState.user}\n` +
-        `• Loading: ${errorInfo.authState.loading}\n` +
-        `• Google Service: ${errorInfo.authState.hasGoogleService}\n\n` +
-        `📋 Full Error Object:\n${errorInfo.fullError.substring(0, 200)}...\n\n` +
-        `💡 Next Steps:\n` +
-        `1. Check browser console for full logs\n` +
-        `2. Verify Firebase config files are present\n` +
-        `3. Confirm OAuth client IDs are correct\n` +
-        `4. Check network tab for failed requests`,
-        [
-          {
-            text: '📋 Copy Error Info',
-            onPress: () => {
-              const errorText = JSON.stringify(errorInfo, null, 2);
-              navigator.clipboard.writeText(errorText);
-              Alert.alert('✅ Copied!', 'Error information copied to clipboard');
-            }
-          },
-          {
-            text: '🔍 Show Full Error',
-            onPress: () => {
-              Alert.alert(
-                '📋 COMPLETE ERROR OBJECT',
-                errorInfo.fullError,
-                [{ text: 'OK' }]
-              );
-            }
-          },
-          { text: '❌ Close' }
-        ]
-      );
-      
-      // Also log everything to console
-      console.group('🚨 COMPREHENSIVE GOOGLE SIGN-IN ERROR');
-      console.log('Error Object:', error);
-      console.log('Error Info:', errorInfo);
-      console.log('Current Auth State:', { user, loading });
-      console.log('Environment:', { url: errorInfo.url, userAgent: errorInfo.userAgent });
-      console.groupEnd();
-      
-    } finally {
-      setIsLoading(false);
-    }
+      ]
+    );
   };
 
   const handleCreateAccount = () => {
@@ -230,6 +134,7 @@ const SignInScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <BackButton />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Logo Section */}
         <View style={styles.logoSection}>

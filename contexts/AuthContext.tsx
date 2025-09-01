@@ -24,6 +24,7 @@ interface AuthContextType {
   updateUserPreferences: (preferences: PartialUserPreferences) => Promise<void>;
   updatePremiumStatus: (premiumUser: PartialPremiumUser) => Promise<void>;
   refreshUserData: () => Promise<void>;
+  forceClearSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -185,20 +186,47 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // Enhanced sign-out
+  // Enhanced sign-out with complete session clearing
   const signOutUser = async (): Promise<void> => {
     try {
+      console.log('🧪 AuthContext: Starting complete sign out process...');
+      
       // Update last active timestamp before signing out
       if (user) {
-        await updateDoc(doc(firestore, 'users', user.id), {
-          lastActive: serverTimestamp(),
-        });
+        console.log('🧪 AuthContext: Updating last active timestamp for user:', user.id);
+        try {
+          await updateDoc(doc(firestore, 'users', user.id), {
+            lastActive: serverTimestamp(),
+          });
+        } catch (error) {
+          console.warn('🧪 AuthContext: Failed to update last active timestamp:', error);
+        }
       }
       
+      console.log('🧪 AuthContext: Calling Firebase signOut...');
       await firebaseSignOut(auth);
+      console.log('🧪 AuthContext: Firebase signOut completed');
+      
+      // Force clear any remaining auth state
+      console.log('🧪 AuthContext: Force clearing auth state...');
+      try {
+        // Clear any cached auth tokens
+        await auth.signOut();
+      } catch (error) {
+        console.warn('🧪 AuthContext: Error during force signOut:', error);
+      }
+      
+      console.log('🧪 AuthContext: Clearing local user state...');
       setUser(null);
+      
+      // Force a small delay to ensure state is cleared
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      console.log('🧪 AuthContext: Complete sign out process finished successfully');
     } catch (error) {
-      console.error('🧪 Sign out error:', error);
+      console.error('🧪 AuthContext: Sign out error:', error);
+      // Even if there's an error, clear the local state
+      setUser(null);
       throw error;
     }
   };
@@ -347,6 +375,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  // Force clear all session data (for debugging/testing)
+  const forceClearSession = async (): Promise<void> => {
+    try {
+      console.log('🧪 AuthContext: Force clearing all session data...');
+      
+      // Clear local state immediately
+      setUser(null);
+      
+      // Force Firebase signOut multiple times to ensure complete clearing
+      try {
+        await firebaseSignOut(auth);
+        console.log('🧪 AuthContext: First signOut completed');
+      } catch (error) {
+        console.warn('🧪 AuthContext: First signOut error:', error);
+      }
+      
+      // Wait a moment and try again
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      try {
+        await firebaseSignOut(auth);
+        console.log('🧪 AuthContext: Second signOut completed');
+      } catch (error) {
+        console.warn('🧪 AuthContext: Second signOut error:', error);
+      }
+      
+      // Force reload the auth state
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      console.log('🧪 AuthContext: Force clear session completed');
+    } catch (error) {
+      console.error('🧪 AuthContext: Force clear session error:', error);
+      // Ensure user state is cleared even on error
+      setUser(null);
+    }
+  };
+
   // Refresh user data from Firestore
   const refreshUserData = async (): Promise<void> => {
     if (!user) return;
@@ -415,6 +480,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     updateUserPreferences,
     updatePremiumStatus,
     refreshUserData,
+    forceClearSession,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

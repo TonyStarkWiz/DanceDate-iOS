@@ -39,7 +39,10 @@ function RootLayoutContent() {
         <Stack.Screen name="takeTour" />
         <Stack.Screen name="create_account" />
         <Stack.Screen name="login" />
+        <Stack.Screen name="signin" />
         <Stack.Screen name="test-auth" />
+        <Stack.Screen name="logout-debug" />
+        <Stack.Screen name="premium" />
       </Stack>
     );
   }
@@ -60,8 +63,16 @@ function RootLayoutContent() {
       <Stack.Screen name="dancePartners" />
       <Stack.Screen name="partnerProfile" />
       <Stack.Screen name="allMatches" />
-      
-      {/* Feed & Social */}
+                  <Stack.Screen name="realMatches" />
+            <Stack.Screen name="simpleRealMatches" />
+            <Stack.Screen name="matchingTest" />
+            <Stack.Screen name="firestoreDebug" />
+            <Stack.Screen name="premiumUpgrade" />
+            <Stack.Screen name="matching" />
+      <Stack.Screen name="matches" />
+      <Stack.Screen name="eventMatches" />
+            
+            {/* Feed & Social */}
       <Stack.Screen name="feed" />
       
       {/* Profile & Settings */}

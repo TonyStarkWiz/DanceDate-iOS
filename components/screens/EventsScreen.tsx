@@ -22,7 +22,7 @@ export default function EventsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [location, setLocation] = useState('New York, NY'); // Default location
+  const [location, setLocation] = useState('Worldwide'); // Default location
 
   useEffect(() => {
     loadEvents();
@@ -35,7 +35,7 @@ export default function EventsScreen() {
   const loadEvents = async () => {
     try {
       setLoading(true);
-      const fetchedEvents = await DanceEventsApiService.searchAllEvents(location);
+      const fetchedEvents = await DanceEventsApiService.searchEvents(location, 25);
       setEvents(fetchedEvents);
     } catch (error) {
       console.error('Failed to load events:', error);
@@ -89,8 +89,21 @@ export default function EventsScreen() {
               <Text style={styles.tagText}>{tag}</Text>
             </View>
           ))}
+          {item.tags.length > 3 && (
+            <View style={styles.tag}>
+              <Text style={styles.tagText}>+{item.tags.length - 3}</Text>
+            </View>
+          )}
         </View>
       </View>
+      
+      {item.description && (
+        <View style={styles.eventDescription}>
+          <Text style={styles.descriptionText} numberOfLines={2}>
+            {item.description}
+          </Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 
@@ -268,8 +281,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
   },
+  eventDescription: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  descriptionText: {
+    color: '#666',
+    fontSize: 14,
+    lineHeight: 20,
+  },
 });
 
 
 
 
+
+import { BackButton } from '../ui/BackButton';
+      <BackButton />

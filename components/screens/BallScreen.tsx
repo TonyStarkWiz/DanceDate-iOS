@@ -728,3 +728,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
+
+import { BackButton } from '../ui/BackButton';
+      <BackButton />

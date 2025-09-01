@@ -420,3 +420,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
+
+import { BackButton } from '../ui/BackButton';
+      <BackButton />

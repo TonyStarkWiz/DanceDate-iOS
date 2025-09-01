@@ -34,8 +34,13 @@ export const COLLECTIONS = {
   PROFILES: 'profiles',
   EVENTS: 'events',
   MATCHES: 'matches',
+  LIKES: 'likes',
+  DISLIKES: 'dislikes',
   CHATS: 'chats',
   MESSAGES: 'messages',
+  API_LOGS: 'api_logs',
+  EVENT_INTERESTS: 'event_interests',
+  EVENT_MATCHES: 'event_matches',
   DANCE_STYLES: 'danceStyles',
   LOCATIONS: 'locations'
 } as const;

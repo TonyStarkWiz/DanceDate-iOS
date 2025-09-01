@@ -190,3 +190,6 @@ const styles = StyleSheet.create({
 });
 
 export default FeedScreen;
+
+import { BackButton } from '../ui/BackButton';
+      <BackButton />

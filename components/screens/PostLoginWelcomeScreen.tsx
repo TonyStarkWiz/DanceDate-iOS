@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { BackButton } from '../ui/BackButton';
 
 export const PostLoginWelcomeScreen: React.FC = () => {
   useEffect(() => {
@@ -29,6 +30,7 @@ export const PostLoginWelcomeScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      <BackButton />
       {/* Edit Profile Button */}
       <TouchableOpacity style={styles.editButton} onPress={handleEditProfile}>
         <Ionicons name="pencil" size={20} color="#fff" />

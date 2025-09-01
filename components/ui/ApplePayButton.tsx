@@ -34,12 +34,13 @@ export const ApplePayButton: React.FC<ApplePayButtonProps> = ({
       activeOpacity={0.8}
     >
       <View style={styles.buttonContent}>
-        <Ionicons 
-          name="logo-apple" 
-          size={20} 
-          color="#000" 
-          style={styles.appleIcon}
-        />
+        <View style={styles.appleLogo}>
+          <Ionicons 
+            name="logo-apple" 
+            size={20} 
+            color="#000" 
+          />
+        </View>
         <Text style={[styles.buttonText, textStyle]}>
           {title}
         </Text>
@@ -51,7 +52,7 @@ export const ApplePayButton: React.FC<ApplePayButtonProps> = ({
 const styles = StyleSheet.create({
   button: {
     backgroundColor: '#000',
-    borderRadius: 8,
+    borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 24,
     minHeight: 50,
@@ -65,24 +66,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+    borderWidth: 1,
+    borderColor: '#000',
   },
   buttonDisabled: {
     backgroundColor: '#999',
     opacity: 0.6,
+    borderColor: '#999',
   },
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  appleIcon: {
+  appleLogo: {
     marginRight: 8,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   buttonText: {
     color: '#fff',
     fontSize: 17,
     fontWeight: '600',
     textAlign: 'center',
+    letterSpacing: 0.5,
   },
 });
 

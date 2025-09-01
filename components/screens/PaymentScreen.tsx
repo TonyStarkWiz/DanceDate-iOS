@@ -371,3 +371,6 @@ const styles = StyleSheet.create({
 });
 
 export default PaymentScreen;
+
+import { BackButton } from '../ui/BackButton';
+      <BackButton />

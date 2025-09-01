@@ -1,8 +1,108 @@
+import { auth } from '@/config/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function EntryScreen() {
+  const { signOutUser, forceClearSession } = useAuth();
+
+  const handleForceLogout = async () => {
+    try {
+      console.log('🧪 EntryScreen: Starting force logout...');
+      
+      Alert.alert(
+        'Force Logout',
+        'This will completely clear all authentication data and force you to sign in again. Continue?',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+          {
+            text: 'Force Logout',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                console.log('🧪 EntryScreen: User confirmed force logout');
+                
+                // Clear all possible storage
+                if (typeof window !== 'undefined') {
+                  // Clear localStorage
+                  localStorage.clear();
+                  console.log('🧪 EntryScreen: localStorage cleared');
+                  
+                  // Clear sessionStorage
+                  sessionStorage.clear();
+                  console.log('🧪 EntryScreen: sessionStorage cleared');
+                  
+                  // Clear any cookies
+                  document.cookie.split(";").forEach(function(c) { 
+                    document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+                  });
+                  console.log('🧪 EntryScreen: cookies cleared');
+                  
+                  // Try Firebase signOut if available
+                  try {
+                    if (auth && typeof auth.signOut === 'function') {
+                      await auth.signOut();
+                      console.log('🧪 EntryScreen: Firebase signOut completed');
+                    }
+                  } catch (firebaseError) {
+                    console.warn('🧪 EntryScreen: Firebase signOut error:', firebaseError);
+                  }
+                  
+                  // Try AuthContext methods if available
+                  try {
+                    if (typeof forceClearSession === 'function') {
+                      await forceClearSession();
+                      console.log('🧪 EntryScreen: Force clear session completed');
+                    }
+                  } catch (sessionError) {
+                    console.warn('🧪 EntryScreen: Force clear session error:', sessionError);
+                  }
+                  
+                  try {
+                    if (typeof signOutUser === 'function') {
+                      await signOutUser();
+                      console.log('🧪 EntryScreen: SignOutUser completed');
+                    }
+                  } catch (signOutError) {
+                    console.warn('🧪 EntryScreen: SignOutUser error:', signOutError);
+                  }
+                }
+                
+                // Force navigation to welcome screen
+                console.log('🧪 EntryScreen: Navigating to welcome screen');
+                router.replace('/welcome');
+                
+                Alert.alert(
+                  'Logout Complete',
+                  'All authentication data has been cleared. You will need to sign in again.',
+                  [{ text: 'OK' }]
+                );
+                
+              } catch (error) {
+                console.error('🧪 EntryScreen: Force logout error:', error);
+                Alert.alert(
+                  'Logout Error',
+                  'There was an error during logout, but you can still try signing in again.',
+                  [{ text: 'OK' }]
+                );
+                // Still navigate to welcome screen
+                router.replace('/welcome');
+              }
+            },
+          },
+        ]
+      );
+      
+    } catch (error) {
+      console.error('🧪 EntryScreen: Error in handleForceLogout:', error);
+      Alert.alert('Error', 'Failed to initiate logout process.');
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>DanceDate</Text>
@@ -17,15 +117,123 @@ export default function EntryScreen() {
       
       <TouchableOpacity 
         style={styles.logoutButton}
+        onPress={handleForceLogout}
+      >
+        <Text style={styles.logoutButtonText}>Force Logout</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity 
+        style={[styles.logoutButton, { marginTop: 10, backgroundColor: 'rgba(255, 255, 255, 0.1)' }]}
         onPress={() => {
-          // Clear any stored auth data
-          localStorage.removeItem('authToken');
-          sessionStorage.clear();
-          // Navigate to welcome screen
-          router.push('/welcome');
+          try {
+            console.log('🧪 EntryScreen: Checking auth state...');
+            
+            let authInfo = 'Auth State Check:\n\n';
+            
+            // Check Firebase Auth
+            try {
+              const currentUser = auth?.currentUser;
+              authInfo += `Firebase User: ${currentUser ? currentUser.email : 'None'}\n`;
+              authInfo += `User ID: ${currentUser ? currentUser.uid : 'None'}\n\n`;
+              console.log('🧪 EntryScreen: Current Firebase user:', currentUser);
+            } catch (firebaseError) {
+              authInfo += `Firebase Auth Error: ${firebaseError.message}\n\n`;
+              console.warn('🧪 EntryScreen: Firebase auth check error:', firebaseError);
+            }
+            
+            // Check localStorage
+            try {
+              const localKeys = Object.keys(localStorage);
+              authInfo += `localStorage Keys: ${localKeys.length}\n`;
+              if (localKeys.length > 0) {
+                authInfo += `Keys: ${localKeys.slice(0, 5).join(', ')}${localKeys.length > 5 ? '...' : ''}\n`;
+              }
+              console.log('🧪 EntryScreen: localStorage keys:', localKeys);
+            } catch (localError) {
+              authInfo += `localStorage Error: ${localError.message}\n`;
+              console.warn('🧪 EntryScreen: localStorage check error:', localError);
+            }
+            
+            // Check sessionStorage
+            try {
+              const sessionKeys = Object.keys(sessionStorage);
+              authInfo += `sessionStorage Keys: ${sessionKeys.length}\n`;
+              if (sessionKeys.length > 0) {
+                authInfo += `Keys: ${sessionKeys.slice(0, 5).join(', ')}${sessionKeys.length > 5 ? '...' : ''}\n`;
+              }
+              console.log('🧪 EntryScreen: sessionStorage keys:', sessionKeys);
+            } catch (sessionError) {
+              authInfo += `sessionStorage Error: ${sessionError.message}\n`;
+              console.warn('🧪 EntryScreen: sessionStorage check error:', sessionError);
+            }
+            
+            Alert.alert('Current Auth State', authInfo, [{ text: 'OK' }]);
+            
+          } catch (error) {
+            console.error('🧪 EntryScreen: Auth state check error:', error);
+            Alert.alert('Error', 'Failed to check auth state. See console for details.');
+          }
         }}
       >
-        <Text style={styles.logoutButtonText}>Logout</Text>
+        <Text style={styles.logoutButtonText}>Check Auth State</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity 
+        style={[styles.logoutButton, { marginTop: 10, backgroundColor: 'rgba(255, 0, 0, 0.2)', borderColor: '#ff0000' }]}
+        onPress={() => {
+          console.log('🧪 EntryScreen: Nuclear logout - clearing everything...');
+          
+          // Clear everything without any complex logic
+          try {
+            localStorage.clear();
+            sessionStorage.clear();
+            console.log('🧪 EntryScreen: Storage cleared');
+          } catch (e) {
+            console.warn('🧪 EntryScreen: Storage clear error:', e);
+          }
+          
+          // Force navigation
+          console.log('🧪 EntryScreen: Navigating to welcome screen');
+          router.replace('/welcome');
+          
+          Alert.alert(
+            'Nuclear Logout Complete',
+            'All storage has been cleared and you have been redirected to the welcome screen.',
+            [{ text: 'OK' }]
+          );
+        }}
+      >
+        <Text style={[styles.logoutButtonText, { color: '#ff0000' }]}>Nuclear Logout</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity 
+        style={[styles.logoutButton, { marginTop: 10, backgroundColor: 'rgba(255, 165, 0, 0.2)', borderColor: '#ffa500' }]}
+        onPress={() => {
+          console.log('🧪 EntryScreen: Browser-based logout...');
+          
+          // Direct browser logout - bypass all Firebase
+          try {
+            // Clear all storage
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            // Clear all cookies
+            document.cookie.split(";").forEach(function(c) { 
+              document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+            });
+            
+            // Force page reload to clear all state
+            console.log('🧪 EntryScreen: Reloading page to clear all state...');
+            window.location.href = '/welcome';
+            
+          } catch (e) {
+            console.error('🧪 EntryScreen: Browser logout error:', e);
+            // Fallback: just navigate
+            router.replace('/welcome');
+          }
+        }}
+      >
+        <Text style={[styles.logoutButtonText, { color: '#ffa500' }]}>Browser Logout</Text>
       </TouchableOpacity>
     </View>
   );

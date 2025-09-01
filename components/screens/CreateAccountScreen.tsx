@@ -13,6 +13,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { BackButton } from '../ui/BackButton';
 
 const CreateAccountScreen: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -96,6 +97,7 @@ const CreateAccountScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <BackButton />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Logo Section */}
         <View style={styles.logoSection}>

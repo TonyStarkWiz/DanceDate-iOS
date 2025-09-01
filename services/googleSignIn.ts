@@ -1,6 +1,7 @@
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+// Temporarily disabled to fix native module error
+// import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
-// Google Sign-In configuration (matches Android AuthViewModel)
+// Mock Google Sign-In configuration (temporary fix)
 export class GoogleSignInService {
   private static instance: GoogleSignInService;
   
@@ -12,7 +13,9 @@ export class GoogleSignInService {
   ];
 
   private constructor() {
-    this.configureGoogleSignIn();
+    // Temporarily disabled configuration
+    // this.configureGoogleSignIn();
+    console.log('🧪 GoogleSignInService: Temporarily disabled - needs development build');
   }
 
   public static getInstance(): GoogleSignInService {
@@ -23,121 +26,56 @@ export class GoogleSignInService {
   }
 
   private configureGoogleSignIn() {
-    GoogleSignin.configure({
-      webClientId: this.clientIds[0], // Primary web client ID
-      iosClientId: this.clientIds[1], // iOS client ID
-      offlineAccess: true,
-      hostedDomain: '',
-      forceCodeForRefreshToken: true,
-    });
+    // Temporarily disabled
+    // GoogleSignin.configure({
+    //   webClientId: this.clientIds[0], // Primary web client ID
+    //   iosClientId: this.clientIds[1], // iOS client ID
+    //   offlineAccess: true,
+    //   hostedDomain: '',
+    //   forceCodeForRefreshToken: true,
+    // });
   }
 
   // Check if Google Play Services are available (Android equivalent)
   public async isGooglePlayServicesAvailable(): Promise<boolean> {
-    try {
-      const isSignedIn = await GoogleSignin.isSignedIn();
-      return true; // If we can check sign-in status, services are available
-    } catch (error) {
-      console.error('🧪 Google Play Services not available:', error);
-      return false;
-    }
+    console.log('🧪 GoogleSignInService: isGooglePlayServicesAvailable - temporarily returns false');
+    return false; // Temporarily disabled
   }
 
   // Get Google Sign-In client (matches Android getGoogleSignInClient)
   public async getGoogleSignInClient(): Promise<boolean> {
-    try {
-      const isAvailable = await this.isGooglePlayServicesAvailable();
-      if (!isAvailable) {
-        throw new Error('Google Play Services not available');
-      }
-      return true;
-    } catch (error) {
-      console.error('🧪 Error getting Google Sign-In client:', error);
-      return false;
-    }
+    console.log('🧪 GoogleSignInService: getGoogleSignInClient - temporarily returns false');
+    return false; // Temporarily disabled
   }
 
   // Sign in with Google (matches Android signInWithGoogle)
   public async signIn(): Promise<{ idToken: string; user: any }> {
-    try {
-      // Check if user is already signed in
-      const isSignedIn = await GoogleSignin.isSignedIn();
-      if (isSignedIn) {
-        // Get current user info
-        const userInfo = await GoogleSignin.getCurrentUser();
-        if (userInfo?.idToken) {
-          return {
-            idToken: userInfo.idToken,
-            user: userInfo,
-          };
-        }
-      }
-
-      // Sign in
-      await GoogleSignin.hasPlayServices();
-      const userInfo = await GoogleSignin.signIn();
-      
-      if (!userInfo.idToken) {
-        throw new Error('No ID token received from Google Sign-In');
-      }
-
-      return {
-        idToken: userInfo.idToken,
-        user: userInfo,
-      };
-    } catch (error: any) {
-      console.error('🧪 Google Sign-In error:', error);
-      
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        throw new Error('Sign-in was cancelled by user');
-      } else if (error.code === statusCodes.IN_PROGRESS) {
-        throw new Error('Sign-in is already in progress');
-      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        throw new Error('Google Play Services not available');
-      } else {
-        throw new Error('Google Sign-In failed: ' + error.message);
-      }
-    }
+    console.log('🧪 GoogleSignInService: signIn - temporarily throws error');
+    throw new Error('Google Sign-In temporarily disabled. Please run: npx eas build --profile development --platform ios');
   }
 
   // Sign out from Google
   public async signOut(): Promise<void> {
-    try {
-      await GoogleSignin.signOut();
-    } catch (error) {
-      console.error('🧪 Google Sign-Out error:', error);
-      throw error;
-    }
+    console.log('🧪 GoogleSignInService: signOut - temporarily disabled');
+    // Temporarily disabled
   }
 
   // Revoke access (completely remove Google account)
   public async revokeAccess(): Promise<void> {
-    try {
-      await GoogleSignin.revokeAccess();
-    } catch (error) {
-      console.error('🧪 Google Revoke Access error:', error);
-      throw error;
-    }
+    console.log('🧪 GoogleSignInService: revokeAccess - temporarily disabled');
+    // Temporarily disabled
   }
 
   // Get current user info
   public async getCurrentUser(): Promise<any> {
-    try {
-      return await GoogleSignin.getCurrentUser();
-    } catch (error) {
-      console.error('🧪 Get Current User error:', error);
-      return null;
-    }
+    console.log('🧪 GoogleSignInService: getCurrentUser - temporarily returns null');
+    return null; // Temporarily disabled
   }
 
   // Check if user is signed in
   public async isSignedIn(): Promise<boolean> {
-    try {
-      return await GoogleSignin.isSignedIn();
-    } catch (error) {
-      console.error('🧪 Check Sign-In Status error:', error);
-      return false;
-    }
+    console.log('🧪 GoogleSignInService: isSignedIn - temporarily returns false');
+    return false; // Temporarily disabled
   }
 }
 

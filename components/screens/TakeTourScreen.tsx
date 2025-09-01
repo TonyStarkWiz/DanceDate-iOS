@@ -266,3 +266,6 @@ const styles = StyleSheet.create({
 
 
 
+
+import { BackButton } from '../ui/BackButton';
+      <BackButton />
