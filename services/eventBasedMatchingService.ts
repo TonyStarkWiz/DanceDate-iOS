@@ -1,3 +1,4 @@
+// eventBasedMatchingService.ts
 import { COLLECTIONS, db } from '@/config/firebase';
 import {
     collection,
@@ -9,8 +10,8 @@ import {
     setDoc,
     where
 } from 'firebase/firestore';
-import { EventInterest, eventInterestService } from './eventInterestService';
 import { chatService } from './chatService';
+import { EventInterest, eventInterestService } from './eventInterestService';
 
 export interface EventBasedMatch {
   id: string;
@@ -39,108 +40,57 @@ export interface EventMatchSuggestion {
 }
 
 class EventBasedMatchingService {
-  private collectionName = COLLECTIONS.EVENT_MATCHES || 'event_matches';
+  private collectionName = COLLECTIONS.MATCHES; // 'matches' collection
 
-  // Find potential matches based on shared event interests
-  async findEventBasedMatches(userId: string, limitCount: number = 10): Promise<EventMatchSuggestion[]> {
-    try {
-      console.log('🧪 EventBasedMatchingService: Finding matches for user:', userId);
-      
-      // Get user's interested events
-      const userInterests = await eventInterestService.getUserInterestedEvents(userId);
-      if (userInterests.length === 0) {
-        console.log('🧪 EventBasedMatchingService: User has no event interests');
-        return [];
-      }
+  // -------- Normalizers / utils --------------------------------------------
 
-      const userEventIds = userInterests.map(interest => interest.eventId);
-      console.log('🧪 EventBasedMatchingService: User interested in events:', userEventIds);
+  private toEventId(x: any): string | undefined {
+    // allow various shapes from interest docs or raw strings
+    return x?.eventId ?? x?.event?.id ?? x?.id ?? (typeof x === 'string' ? x : undefined);
+  }
 
-      // Find other users interested in the same events
-      const potentialMatches = new Map<string, EventMatchSuggestion>();
+  private safeLower(s: any): string {
+    return typeof s === 'string' ? s.toLowerCase() : '';
+  }
 
-      for (const eventId of userEventIds) {
-        const interestedUsers = await eventInterestService.getUsersInterestedInEvent(eventId);
-        
-        for (const otherUserId of interestedUsers) {
-          if (otherUserId === userId) continue; // Skip self
-          
-          // Get the other user's interests for this event
-          const otherUserInterests = await eventInterestService.getUserInterestedEvents(otherUserId);
-          const sharedEvents = otherUserInterests.filter(interest => 
-            userEventIds.includes(interest.eventId)
-          );
-
-          if (sharedEvents.length > 0) {
-            // Calculate match strength based on shared events
-            const matchStrength = this.calculateMatchStrength(sharedEvents.length, userEventIds.length);
-            
-            // Get or create match suggestion
-            const existing = potentialMatches.get(otherUserId);
-            if (existing) {
-              // Update with more shared events if found
-              if (sharedEvents.length > existing.sharedEvents.length) {
-                existing.sharedEvents = sharedEvents;
-                existing.matchStrength = matchStrength;
-              }
-            } else {
-              // Create new match suggestion
-              const otherUserProfile = await this.getUserProfile(otherUserId);
-              potentialMatches.set(otherUserId, {
-                userId: otherUserId,
-                sharedEvents,
-                matchStrength,
-                commonInterests: this.extractCommonInterests(sharedEvents),
-                potentialPartner: {
-                  id: otherUserId,
-                  name: otherUserProfile?.name || 'Unknown User',
-                  profile: otherUserProfile
-                }
-              });
-            }
-          }
-        }
-      }
-
-      // Convert to array and sort by match strength
-      const suggestions = Array.from(potentialMatches.values())
-        .sort((a, b) => b.matchStrength - a.matchStrength)
-        .slice(0, limitCount);
-
-      console.log('🧪 EventBasedMatchingService: Found', suggestions.length, 'potential matches');
-      return suggestions;
-    } catch (error) {
-      console.error('🧪 EventBasedMatchingService: Error finding matches:', error);
-      return [];
-    }
+  private nameFromProfile(p: any): string | undefined {
+    return p?.name ?? p?.displayName ?? p?.fullName ?? p?.username ?? undefined;
   }
 
   // Calculate match strength based on shared interests
   private calculateMatchStrength(sharedCount: number, totalUserInterests: number): number {
-    // Base strength on percentage of shared interests
-    const baseStrength = (sharedCount / totalUserInterests) * 100;
-    
-    // Bonus for multiple shared interests
+    const baseStrength = (sharedCount / Math.max(totalUserInterests, 1)) * 100;
     const bonus = Math.min(sharedCount * 10, 30);
-    
-    return Math.min(baseStrength + bonus, 100);
+    return Math.min(Math.round(baseStrength + bonus), 100);
   }
 
-  // Extract common interests from shared events
+  // Extract common interests from shared events (robust to missing fields)
   private extractCommonInterests(sharedEvents: EventInterest[]): string[] {
     const interests = new Set<string>();
-    
-    sharedEvents.forEach(event => {
-      if (event.eventData?.tags) {
-        event.eventData.tags.forEach(tag => interests.add(tag));
+
+    for (const ev of sharedEvents || []) {
+      const tags = ev?.eventData?.tags;
+      if (Array.isArray(tags)) {
+        for (const t of tags) {
+          if (typeof t === 'string' && t.trim()) interests.add(t.trim());
+        }
       }
-      // Add event type based on title/instructor
-      if (event.eventTitle.toLowerCase().includes('salsa')) interests.add('Salsa');
-      if (event.eventTitle.toLowerCase().includes('bachata')) interests.add('Bachata');
-      if (event.eventTitle.toLowerCase().includes('ballroom')) interests.add('Ballroom');
-      if (event.eventTitle.toLowerCase().includes('swing')) interests.add('Swing');
-    });
-    
+      const title =
+        ev?.eventTitle ??
+        ev?.eventName ??
+        ev?.eventData?.title ??
+        ev?.eventData?.name ??
+        '';
+
+      const tl = this.safeLower(title);
+      if (tl.includes('salsa')) interests.add('Salsa');
+      if (tl.includes('bachata')) interests.add('Bachata');
+      if (tl.includes('ballroom')) interests.add('Ballroom');
+      if (tl.includes('swing')) interests.add('Swing');
+      if (tl.includes('kizomba')) interests.add('Kizomba');
+      if (tl.includes('zouk')) interests.add('Zouk');
+    }
+
     return Array.from(interests);
   }
 
@@ -158,17 +108,108 @@ class EventBasedMatchingService {
     }
   }
 
+  // -------- Public APIs -----------------------------------------------------
+
+  // Find potential matches based on shared event interests
+  async findEventBasedMatches(userId: string, limitCount: number = 10): Promise<EventMatchSuggestion[]> {
+    try {
+      console.log('🧪 EventBasedMatchingService: Finding matches for user:', userId);
+
+      // 1) Load current user's interests once
+      const userInterests = await eventInterestService.getUserInterestedEvents(userId);
+      if (!userInterests || userInterests.length === 0) {
+        console.log('🧪 EventBasedMatchingService: User has no event interests');
+        return [];
+      }
+
+      // Normalize to event IDs and de-dupe
+      const userEventIdSet = new Set(
+        userInterests.map((i: any) => this.toEventId(i)).filter(Boolean) as string[]
+      );
+      const userEventIds = Array.from(userEventIdSet);
+      console.log('🧪 EventBasedMatchingService: User interested in events:', userEventIds);
+
+      if (userEventIds.length === 0) {
+        console.log('🧪 EventBasedMatchingService: No normalized event IDs; check interest shapes.');
+        return [];
+      }
+
+      // 2) Collect all interested users across the user's events
+      const interestedUserSets = await Promise.all(
+        userEventIds.map((eid) => eventInterestService.getUsersInterestedInEvent(eid))
+      );
+
+      // Flatten & de-dupe; exclude self
+      const allOtherUsers = new Set<string>();
+      for (const arr of interestedUserSets) {
+        for (const uid of arr || []) {
+          if (uid && uid !== userId) allOtherUsers.add(uid);
+        }
+      }
+
+      if (allOtherUsers.size === 0) {
+        console.log('🧪 EventBasedMatchingService: No other users share these events.');
+        return [];
+      }
+
+      // 3) For each other user, fetch their interests in parallel and compute shared events
+      const suggestions: EventMatchSuggestion[] = [];
+      const otherUserIds = Array.from(allOtherUsers);
+
+      await Promise.all(
+        otherUserIds.map(async (otherId) => {
+          const otherInterests = await eventInterestService.getUserInterestedEvents(otherId);
+          if (!otherInterests || otherInterests.length === 0) return;
+
+          const shared = otherInterests.filter((oi: any) => {
+            const eid = this.toEventId(oi);
+            return eid ? userEventIdSet.has(eid) : false;
+          });
+
+          if (shared.length === 0) return;
+
+          const matchStrength = this.calculateMatchStrength(shared.length, userEventIdSet.size);
+          const profile = await this.getUserProfile(otherId).catch(() => null);
+
+          suggestions.push({
+            userId: otherId,
+            sharedEvents: shared,
+            matchStrength,
+            commonInterests: this.extractCommonInterests(shared),
+            potentialPartner: {
+              id: otherId,
+              name: this.nameFromProfile(profile) || 'Unknown User',
+              profile
+            }
+          });
+        })
+      );
+
+      // 4) Sort & limit
+      const sorted = suggestions.sort((a, b) => b.matchStrength - a.matchStrength);
+      const limited = sorted.slice(0, limitCount);
+
+      console.log('🧪 EventBasedMatchingService: Found', limited.length, 'potential matches');
+      return limited;
+    } catch (error) {
+      console.error('🧪 EventBasedMatchingService: Error finding matches:', error);
+      return [];
+    }
+  }
+
   // Create a match between two users
   async createEventBasedMatch(userId1: string, userId2: string, sharedEvents: string[]): Promise<string> {
     try {
       console.log('🧪 EventBasedMatchingService: Creating match between users:', userId1, userId2);
-      
-      const matchId = `${userId1}_${userId2}`;
+
+      // Optional: normalize ordering to avoid duplicate pairs with reversed order
+      const [a, b] = [userId1, userId2].sort();
+      const matchId = `${a}_${b}`;
       const matchStrength = this.calculateMatchStrength(sharedEvents.length, sharedEvents.length);
-      
+
       const matchData: Omit<EventBasedMatch, 'id'> = {
-        userId1,
-        userId2,
+        userId1: a,
+        userId2: b,
         sharedEvents,
         matchStrength,
         matchedAt: new Date(),
@@ -194,29 +235,44 @@ class EventBasedMatchingService {
   async getUserEventMatches(userId: string): Promise<EventBasedMatch[]> {
     try {
       console.log('🧪 EventBasedMatchingService: Getting matches for user:', userId);
-      
-      const matchesQuery = query(
-        collection(db, this.collectionName),
-        where('userId1', '==', userId)
-      );
-      
-      const snapshot = await getDocs(matchesQuery);
+
+      const matchesQuery1 = query(collection(db, this.collectionName), where('userId1', '==', userId));
+      const matchesQuery2 = query(collection(db, this.collectionName), where('userId2', '==', userId));
+
+      const [snapshot1, snapshot2] = await Promise.all([getDocs(matchesQuery1), getDocs(matchesQuery2)]);
+
       const matches: EventBasedMatch[] = [];
-      
-      snapshot.forEach(doc => {
-        const data = doc.data();
+
+      snapshot1.forEach((d) => {
+        const data = d.data() as any;
         matches.push({
-          id: doc.id,
+          id: d.id,
           userId1: data.userId1,
           userId2: data.userId2,
           sharedEvents: data.sharedEvents || [],
           matchStrength: data.matchStrength || 0,
-          matchedAt: data.matchedAt?.toDate() || new Date(),
+          matchedAt: data.matchedAt?.toDate?.() || new Date(),
           status: data.status || 'pending',
-          lastActivity: data.lastActivity?.toDate() || new Date()
+          lastActivity: data.lastActivity?.toDate?.() || new Date(),
+          chatId: data.chatId
         });
       });
-      
+
+      snapshot2.forEach((d) => {
+        const data = d.data() as any;
+        matches.push({
+          id: d.id,
+          userId1: data.userId1,
+          userId2: data.userId2,
+          sharedEvents: data.sharedEvents || [],
+          matchStrength: data.matchStrength || 0,
+          matchedAt: data.matchedAt?.toDate?.() || new Date(),
+          status: data.status || 'pending',
+          lastActivity: data.lastActivity?.toDate?.() || new Date(),
+          chatId: data.chatId
+        });
+      });
+
       console.log('🧪 EventBasedMatchingService: Found', matches.length, 'matches');
       return matches;
     } catch (error) {
@@ -229,25 +285,27 @@ class EventBasedMatchingService {
   async respondToMatch(matchId: string, userId: string, accept: boolean): Promise<void> {
     try {
       console.log('🧪 EventBasedMatchingService: User responding to match:', matchId, accept);
-      
+
       const matchRef = doc(db, this.collectionName, matchId);
       const matchDoc = await getDoc(matchRef);
-      
-      if (!matchDoc.exists()) {
-        throw new Error('Match not found');
-      }
-      
-      const matchData = matchDoc.data();
-      if (matchData.userId2 !== userId) {
+
+      if (!matchDoc.exists()) throw new Error('Match not found');
+
+      const matchData = matchDoc.data() as any;
+      if (matchData.userId1 !== userId && matchData.userId2 !== userId) {
         throw new Error('User not authorized to respond to this match');
       }
-      
-      await setDoc(matchRef, {
-        ...matchData,
-        status: accept ? 'accepted' : 'declined',
-        lastActivity: serverTimestamp()
-      });
-      
+
+      await setDoc(
+        matchRef,
+        {
+          ...matchData,
+          status: accept ? 'accepted' : 'declined',
+          lastActivity: serverTimestamp()
+        },
+        { merge: true }
+      );
+
       console.log('🧪 EventBasedMatchingService: Match response recorded');
     } catch (error) {
       console.error('🧪 EventBasedMatchingService: Error responding to match:', error);
@@ -255,12 +313,10 @@ class EventBasedMatchingService {
     }
   }
 
-  // Get match suggestions for a user (real-time)
+  // Get match suggestions for a user (polling)
   onEventMatchSuggestions(userId: string, callback: (suggestions: EventMatchSuggestion[]) => void) {
     console.log('🧪 EventBasedMatchingService: Setting up real-time match suggestions for:', userId);
-    
-    // This would ideally use real-time listeners, but for now we'll use polling
-    // In a real implementation, you'd set up Firestore listeners
+
     const interval = setInterval(async () => {
       try {
         const suggestions = await this.findEventBasedMatches(userId);
@@ -268,9 +324,8 @@ class EventBasedMatchingService {
       } catch (error) {
         console.error('🧪 EventBasedMatchingService: Error in real-time suggestions:', error);
       }
-    }, 30000); // Check every 30 seconds
-    
-    // Return cleanup function
+    }, 30000);
+
     return () => clearInterval(interval);
   }
 
@@ -283,27 +338,28 @@ class EventBasedMatchingService {
   }> {
     try {
       console.log('🧪 EventBasedMatchingService: Getting analytics for user:', userId);
-      
+
       const matches = await this.getUserEventMatches(userId);
-      const acceptedMatches = matches.filter(match => match.status === 'accepted');
-      
-      const averageStrength = matches.length > 0 
-        ? matches.reduce((sum, match) => sum + match.matchStrength, 0) / matches.length 
-        : 0;
-      
-      // Get top shared events
+      const acceptedMatches = matches.filter((m) => m.status === 'accepted');
+
+      const averageStrength =
+        matches.length > 0
+          ? matches.reduce((sum, m) => sum + (m.matchStrength || 0), 0) / matches.length
+          : 0;
+
       const eventCounts = new Map<string, number>();
-      matches.forEach(match => {
-        match.sharedEvents.forEach(eventId => {
-          eventCounts.set(eventId, (eventCounts.get(eventId) || 0) + 1);
-        });
-      });
-      
+      for (const m of matches) {
+        for (const eid of m.sharedEvents || []) {
+          if (!eid) continue;
+          eventCounts.set(eid, (eventCounts.get(eid) || 0) + 1);
+        }
+      }
+
       const topSharedEvents = Array.from(eventCounts.entries())
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
-        .map(([eventId]) => eventId);
-      
+        .map(([eid]) => eid);
+
       return {
         totalMatches: matches.length,
         acceptedMatches: acceptedMatches.length,
@@ -319,55 +375,53 @@ class EventBasedMatchingService {
         topSharedEvents: []
       };
     }
+  }
+
   // Create a match between two users and create a chat room
   async createMatchWithChat(userId1: string, userId2: string, sharedEvents: EventInterest[]): Promise<string> {
     try {
       console.log('🧪 EventBasedMatchingService: Creating match with chat for users:', userId1, userId2);
-      
-      // Calculate match strength
-      const matchStrength = this.calculateMatchStrength(sharedEvents.length, 10); // Assuming max 10 events
-      
-      // Get event names for chat
-      const eventNames = sharedEvents.map(event => event.eventName || 'Unknown Event');
-      const primaryEventName = eventNames[0] || 'shared interests';
-      const primaryEventId = sharedEvents[0]?.eventId;
-      
-      // Create match record
+
+      const [a, b] = [userId1, userId2].sort();
+      const matchStrength = this.calculateMatchStrength(sharedEvents.length, 10); // assume max 10 events
+
+      const primaryEventId = this.toEventId(sharedEvents[0]);
+      const primaryEventName =
+        sharedEvents[0]?.eventName ||
+        sharedEvents[0]?.eventTitle ||
+        sharedEvents[0]?.eventData?.title ||
+        'shared interests';
+
       const matchData: EventBasedMatch = {
-        id: `${userId1}_${userId2}_${Date.now()}`,
-        userId1,
-        userId2,
-        sharedEvents: sharedEvents.map(event => event.eventId),
+        id: `${a}_${b}_${Date.now()}`,
+        userId1: a,
+        userId2: b,
+        sharedEvents: sharedEvents.map((e) => this.toEventId(e)).filter(Boolean) as string[],
         matchStrength,
         matchedAt: new Date(),
         status: 'pending',
         lastActivity: new Date()
       };
-      
+
       // Save match to Firestore
-      await setDoc(doc(db, COLLECTIONS.EVENT_MATCHES, matchData.id), {
+      await setDoc(doc(db, this.collectionName, matchData.id), {
         ...matchData,
         matchedAt: serverTimestamp(),
         lastActivity: serverTimestamp()
       });
-      
+
       // Create chat room for the match
-      const chatId = await chatService.createChatForMatch(
-        matchData.id,
-        [userId1, userId2],
-        primaryEventId,
-        primaryEventName
-      );
-      
+      const chatId = await chatService.createChatForMatch(matchData.id, [a, b], primaryEventId, primaryEventName);
+
       // Update match with chat ID
-      await setDoc(doc(db, COLLECTIONS.EVENT_MATCHES, matchData.id), {
-        chatId,
-        lastActivity: serverTimestamp()
-      }, { merge: true });
-      
+      await setDoc(
+        doc(db, this.collectionName, matchData.id),
+        { chatId, lastActivity: serverTimestamp() },
+        { merge: true }
+      );
+
       console.log('🧪 EventBasedMatchingService: Match created with chat ID:', chatId);
       return chatId;
-      
     } catch (error) {
       console.error('🧪 EventBasedMatchingService: Error creating match with chat:', error);
       throw error;
@@ -378,26 +432,22 @@ class EventBasedMatchingService {
   async acceptMatch(matchId: string, userId: string): Promise<string | null> {
     try {
       console.log('🧪 EventBasedMatchingService: Accepting match:', matchId);
-      
-      const matchDoc = await getDoc(doc(db, COLLECTIONS.EVENT_MATCHES, matchId));
-      if (!matchDoc.exists()) {
-        throw new Error('Match not found');
-      }
-      
+
+      const matchDoc = await getDoc(doc(db, this.collectionName, matchId));
+      if (!matchDoc.exists()) throw new Error('Match not found');
+
       const matchData = matchDoc.data() as EventBasedMatch;
-      if (!matchData.participants?.includes(userId)) {
+      if (matchData.userId1 !== userId && matchData.userId2 !== userId) {
         throw new Error('User not authorized to accept this match');
       }
-      
-      // Update match status
-      await setDoc(doc(db, COLLECTIONS.EVENT_MATCHES, matchId), {
-        status: 'accepted',
-        lastActivity: serverTimestamp()
-      }, { merge: true });
-      
-      // Return chat ID if exists
+
+      await setDoc(
+        doc(db, this.collectionName, matchId),
+        { status: 'accepted', lastActivity: serverTimestamp() },
+        { merge: true }
+      );
+
       return matchData.chatId || null;
-      
     } catch (error) {
       console.error('🧪 EventBasedMatchingService: Error accepting match:', error);
       throw error;

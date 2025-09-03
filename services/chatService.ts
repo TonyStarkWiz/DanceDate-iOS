@@ -1,423 +1,387 @@
-import { COLLECTIONS, db } from '@/config/firebase';
+import { auth, COLLECTIONS, db } from '@/config/firebase';
 import {
-    addDoc,
-    collection,
-    doc,
-    getDoc,
-    getDocs,
-    onSnapshot,
-    orderBy,
-    query,
-    serverTimestamp,
-    updateDoc,
-    where,
-    deleteDoc,
-    writeBatch
+  collection,
+  doc,
+  getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+  Timestamp,
+  updateDoc,
+  where,
+  writeBatch
 } from 'firebase/firestore';
 
-export interface Message {
-  id: string;
+export enum MessageType {
+  TEXT = 'text',
+  IMAGE = 'image',
+  LOCATION = 'location',
+  EVENT_INVITE = 'event_invite',
+  DANCE_INVITE = 'dance_invite',
+  DANCE_INVITATION = 'dance_invitation',
+  SYSTEM = 'system'
+}
+
+export interface ChatMessage {
+  messageId: string;
+  chatId: string;
   text: string;
+  message: string; // For compatibility
   senderId: string;
-  senderName?: string;
-  timestamp: Date;
-  type: 'text' | 'image' | 'event' | 'system';
+  receiverId: string; // For compatibility
+  senderName: string;
+  senderImageUrl?: string;
+  timestamp: any;
+  type: MessageType;
   read: boolean;
-  eventId?: string; // For event-related messages
+  readBy: string[];
+  readAt?: any;
 }
 
 export interface Chat {
-  id: string;
+  chatId: string;
   participants: string[];
-  participantNames?: { [userId: string]: string };
   lastMessage: string;
-  lastMessageTime: Date;
-  lastMessageSender?: string;
-  eventId?: string;
-  eventName?: string;
+  lastMessageTime: any;
+  lastMessageSenderId: string;
+  typingUsers: string[];
+  createdAt: any;
+  updatedAt: any;
   isActive: boolean;
-  createdAt: Date;
-  matchId?: string; // Link to the match that created this chat
-  unreadCount?: { [userId: string]: number };
-}
-
-export interface ChatRoom {
-  id: string;
-  chat: Chat;
-  messages: Message[];
-  isTyping?: { [userId: string]: boolean };
+  eventId?: string;
+  eventTitle?: string;
+  matchType?: string;
 }
 
 class ChatService {
-  private typingUsers = new Map<string, Set<string>>(); // chatId -> Set of typing user IDs
+  private readonly TAG = 'ChatService';
 
-  // Create a new chat room for matched partners
-  async createChatForMatch(matchId: string, participants: string[], eventId?: string, eventName?: string): Promise<string> {
+  /**
+   * 🎯 CREATE OR GET CHAT
+   * Creates a new chat or returns existing chat between two users
+   */
+  async createOrGetChat(participantIds: string[]): Promise<Result<string>> {
     try {
-      console.log('🧪 ChatService: Creating chat for match:', matchId, 'participants:', participants);
-      
-      // Get participant names
-      const participantNames: { [userId: string]: string } = {};
-      for (const userId of participants) {
-        const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, userId));
-        if (userDoc.exists()) {
-          participantNames[userId] = userDoc.data().name || 'Unknown User';
-        }
+      console.log(`🧪 🎯 Creating or getting chat for participants: ${participantIds}`);
+
+      const currentUserId = auth.currentUser?.uid;
+      if (!currentUserId) {
+        console.error('🧪 ❌ No authenticated user');
+        return { success: false, error: 'User not authenticated' };
       }
 
-      const chatData = {
-        participants,
-        participantNames,
-        lastMessage: 'Chat started',
-        lastMessageTime: serverTimestamp(),
-        lastMessageSender: 'system',
-        eventId,
-        eventName,
-        isActive: true,
-        createdAt: serverTimestamp(),
-        matchId,
-        unreadCount: participants.reduce((acc, userId) => {
-          acc[userId] = 0;
-          return acc;
-        }, {} as { [userId: string]: number })
+      // Ensure current user is in participants
+      const allParticipants = participantIds.includes(currentUserId) 
+        ? participantIds 
+        : [...participantIds, currentUserId];
+
+      // Check if chat already exists
+      const existingChat = await this.findExistingChat(allParticipants);
+      if (existingChat) {
+        console.log(`🧪 ✅ Found existing chat: ${existingChat.chatId}`);
+        return { success: true, data: existingChat.chatId };
+      }
+
+      // Create new chat
+      const chatId = this.generateChatId(allParticipants);
+      const chatData: Partial<Chat> = {
+        participants: allParticipants,
+        lastMessage: '',
+        lastMessageTime: Timestamp.now(),
+        createdAt: Timestamp.now(),
+        isActive: true
       };
 
-      const chatRef = await addDoc(collection(db, COLLECTIONS.CHATS), chatData);
-      
-      // Add system message
-      await this.sendMessage(chatRef.id, 'system', `🎉 Chat started! You matched over ${eventName || 'shared interests'}`, 'system');
-      
-      console.log('🧪 ChatService: Chat created with ID:', chatRef.id);
-      return chatRef.id;
-      
+      await setDoc(doc(db, COLLECTIONS.CHATS, chatId), chatData);
+
+      console.log(`🧪 ✅ Created new chat: ${chatId}`);
+      return { success: true, data: chatId };
+
     } catch (error) {
-      console.error('🧪 ChatService: Error creating chat:', error);
-      throw error;
+      console.error('🧪 ❌ Error creating/getting chat', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
 
-  // Send a message to a chat
-  async sendMessage(chatId: string, senderId: string, text: string, type: 'text' | 'image' | 'event' | 'system' = 'text'): Promise<string> {
+  /**
+   * 🎯 SEND MESSAGE
+   * Sends a message to a chat and updates last message
+   */
+  async sendMessage(
+    chatId: string,
+    text: string,
+    type: MessageType = MessageType.TEXT
+  ): Promise<Result<string>> {
     try {
-      console.log('🧪 ChatService: Sending message to chat:', chatId);
-      
-      // Get sender name
-      let senderName = 'System';
-      if (senderId !== 'system') {
-        const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, senderId));
-        if (userDoc.exists()) {
-          senderName = userDoc.data().name || 'Unknown User';
-        }
+      console.log(`🧪 💬 Sending message to chat: ${chatId}`);
+
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        console.error('🧪 ❌ No authenticated user');
+        return { success: false, error: 'User not authenticated' };
       }
-      
+
+      const messageId = doc(collection(db, COLLECTIONS.CHATS, chatId, 'messages')).id;
+
+      // Create message data
       const messageData = {
         text,
-        senderId,
-        senderName,
-        timestamp: serverTimestamp(),
-        type,
+        senderId: currentUser.uid,
+        timestamp: Timestamp.now(),
+        type: type,
         read: false
       };
 
-      const messageRef = await addDoc(collection(db, COLLECTIONS.CHATS, chatId, COLLECTIONS.MESSAGES), messageData);
-      
-      // Update chat's last message and unread counts
-      const chatRef = doc(db, COLLECTIONS.CHATS, chatId);
-      const chatDoc = await getDoc(chatRef);
-      
-      if (chatDoc.exists()) {
-        const chatData = chatDoc.data() as Chat;
-        const unreadCount = { ...chatData.unreadCount };
-        
-        // Increment unread count for all participants except sender
-        chatData.participants.forEach(participantId => {
-          if (participantId !== senderId) {
-            unreadCount[participantId] = (unreadCount[participantId] || 0) + 1;
-          }
-        });
+      // Write message and update chat in batch
+      const batch = writeBatch(db);
 
-        await updateDoc(chatRef, {
-          lastMessage: text,
-          lastMessageTime: serverTimestamp(),
-          lastMessageSender: senderName,
-          unreadCount
-        });
-      }
+      // Add message
+      const messageRef = doc(db, COLLECTIONS.CHATS, chatId, 'messages', messageId);
+      batch.set(messageRef, messageData);
 
-      console.log('🧪 ChatService: Message sent with ID:', messageRef.id);
-      return messageRef.id;
-      
-    } catch (error) {
-      console.error('🧪 ChatService: Error sending message:', error);
-      throw error;
-    }
-  }
-
-  // Mark messages as read
-  async markMessagesAsRead(chatId: string, userId: string): Promise<void> {
-    try {
-      console.log('🧪 ChatService: Marking messages as read for user:', userId, 'in chat:', chatId);
-      
-      const batch = writeBatch();
-      
-      // Mark all unread messages as read
-      const unreadMessagesQuery = query(
-        collection(db, COLLECTIONS.CHATS, chatId, COLLECTIONS.MESSAGES),
-        where('read', '==', false),
-        where('senderId', '!=', userId)
-      );
-      
-      const unreadMessages = await getDocs(unreadMessagesQuery);
-      unreadMessages.forEach(doc => {
-        batch.update(doc.ref, { read: true });
-      });
-      
-      // Reset unread count for this user
+      // Update chat last message
       const chatRef = doc(db, COLLECTIONS.CHATS, chatId);
       batch.update(chatRef, {
-        [`unreadCount.${userId}`]: 0
+        lastMessage: text,
+        lastMessageTime: Timestamp.now(),
+        lastMessageSenderId: currentUser.uid,
+        updatedAt: Timestamp.now()
       });
-      
+
       await batch.commit();
-      console.log('🧪 ChatService: Messages marked as read');
-      
+
+      console.log(`🧪 ✅ Message sent successfully: ${messageId}`);
+      return { success: true, data: messageId };
+
     } catch (error) {
-      console.error('🧪 ChatService: Error marking messages as read:', error);
-      throw error;
+      console.error('🧪 ❌ Error sending message', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
 
-  // Get messages for a chat with real-time updates
-  onMessages(chatId: string, callback: (messages: Message[]) => void): () => void {
-    console.log('🧪 ChatService: Setting up real-time message listener for chat:', chatId);
-    
+  /**
+   * 🎯 LISTEN TO MESSAGES (REAL-TIME)
+   * Returns a callback function to listen to messages with real-time updates
+   */
+  listenToMessages(
+    chatId: string,
+    callback: (messages: ChatMessage[]) => void
+  ): () => void {
+    console.log(`🧪 👂 Starting message listener for chat: ${chatId}`);
+
     const messagesQuery = query(
-      collection(db, COLLECTIONS.CHATS, chatId, COLLECTIONS.MESSAGES),
-      orderBy('timestamp', 'asc')
+      collection(db, COLLECTIONS.CHATS, chatId, 'messages'),
+      orderBy('timestamp', 'asc'),
+      limit(100) // Load last 100 messages
     );
 
     const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-      const messages: Message[] = [];
-      
-      snapshot.forEach(doc => {
+      if (snapshot.empty) {
+        console.log('🧪 📨 No messages found');
+        callback([]);
+        return;
+      }
+
+      const messages: ChatMessage[] = snapshot.docs.map(doc => {
         const data = doc.data();
-        messages.push({
-          id: doc.id,
-          text: data.text,
-          senderId: data.senderId,
-          senderName: data.senderName,
-          timestamp: data.timestamp?.toDate() || new Date(),
-          type: data.type || 'text',
+        return {
+          messageId: doc.id,
+          chatId,
+          text: data.text || '',
+          message: data.text || '', // For compatibility
+          senderId: data.senderId || '',
+          receiverId: '', // Will be populated if needed
+          senderName: data.senderName || '',
+          senderImageUrl: data.senderImageUrl,
+          timestamp: data.timestamp,
+          type: data.type || MessageType.TEXT,
           read: data.read || false,
-          eventId: data.eventId
-        });
+          readBy: data.readBy || [],
+          readAt: data.readAt
+        };
       });
 
+      console.log(`🧪 📨 Received ${messages.length} messages`);
       callback(messages);
+    }, (error) => {
+      console.error('🧪 ❌ Error listening to messages', error);
     });
 
     return unsubscribe;
   }
 
-  // Get user's chats with real-time updates
-  onUserChats(userId: string, callback: (chats: Chat[]) => void): () => void {
-    console.log('🧪 ChatService: Setting up real-time chat listener for user:', userId);
-    
-    const chatsQuery = query(
-      collection(db, COLLECTIONS.CHATS),
-      where('participants', 'array-contains', userId),
-      orderBy('lastMessageTime', 'desc')
-    );
+  /**
+   * 🎯 GET CHAT HISTORY
+   * Gets chat history without real-time updates
+   */
+  async getChatHistory(chatId: string): Promise<ChatMessage[]> {
+    try {
+      const messagesQuery = query(
+        collection(db, COLLECTIONS.CHATS, chatId, 'messages'),
+        orderBy('timestamp', 'asc'),
+        limit(100)
+      );
 
-    const unsubscribe = onSnapshot(chatsQuery, (snapshot) => {
-      const chats: Chat[] = [];
+      const snapshot = await getDocs(messagesQuery);
       
-      snapshot.forEach(doc => {
+      return snapshot.docs.map(doc => {
         const data = doc.data();
-        chats.push({
-          id: doc.id,
-          participants: data.participants || [],
-          participantNames: data.participantNames || {},
-          lastMessage: data.lastMessage || '',
-          lastMessageTime: data.lastMessageTime?.toDate() || new Date(),
-          lastMessageSender: data.lastMessageSender,
-          eventId: data.eventId,
-          eventName: data.eventName,
-          isActive: data.isActive || true,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          matchId: data.matchId,
-          unreadCount: data.unreadCount || {}
-        });
+        return {
+          messageId: doc.id,
+          chatId,
+          text: data.text || '',
+          message: data.text || '',
+          senderId: data.senderId || '',
+          receiverId: '',
+          senderName: data.senderName || '',
+          senderImageUrl: data.senderImageUrl,
+          timestamp: data.timestamp,
+          type: data.type || MessageType.TEXT,
+          read: data.read || false,
+          readBy: data.readBy || [],
+          readAt: data.readAt
+        };
+      });
+    } catch (error) {
+      console.error('🧪 ❌ Error getting chat history', error);
+      return [];
+    }
+  }
+
+  /**
+   * 🎯 MARK MESSAGE AS READ
+   * Marks a message as read by the current user
+   */
+  async markMessageAsRead(chatId: string, messageId: string): Promise<Result<void>> {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        return { success: false, error: 'User not authenticated' };
+      }
+
+      const messageRef = doc(db, COLLECTIONS.CHATS, chatId, 'messages', messageId);
+      await updateDoc(messageRef, {
+        read: true,
+        readBy: [currentUser.uid]
       });
 
-      callback(chats);
-    });
+      console.log(`🧪 ✅ Message marked as read: ${messageId}`);
+      return { success: true };
 
-    return unsubscribe;
+    } catch (error) {
+      console.error('🧪 ❌ Error marking message as read', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
   }
 
-  // Get user's chats (non-real-time)
-  async getUserChats(userId: string): Promise<Chat[]> {
+  /**
+   * 🎯 GET USER'S CHATS
+   * Gets all chats for the current user
+   */
+  async getUserChats(): Promise<Chat[]> {
     try {
-      console.log('🧪 ChatService: Getting chats for user:', userId);
-      
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        return [];
+      }
+
       const chatsQuery = query(
         collection(db, COLLECTIONS.CHATS),
-        where('participants', 'array-contains', userId),
+        where('participants', 'array-contains', currentUser.uid),
         orderBy('lastMessageTime', 'desc')
       );
 
       const snapshot = await getDocs(chatsQuery);
-      const chats: Chat[] = [];
-
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        chats.push({
-          id: doc.id,
-          participants: data.participants || [],
-          participantNames: data.participantNames || {},
-          lastMessage: data.lastMessage || '',
-          lastMessageTime: data.lastMessageTime?.toDate() || new Date(),
-          lastMessageSender: data.lastMessageSender,
-          eventId: data.eventId,
-          eventName: data.eventName,
-          isActive: data.isActive || true,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          matchId: data.matchId,
-          unreadCount: data.unreadCount || {}
-        });
-      });
-
-      console.log('🧪 ChatService: Found', chats.length, 'chats for user');
-      return chats;
       
+      return snapshot.docs.map(doc => ({
+        chatId: doc.id,
+        ...doc.data()
+      } as Chat));
     } catch (error) {
-      console.error('🧪 ChatService: Error getting user chats:', error);
-      throw error;
+      console.error('🧪 ❌ Error getting user chats', error);
+      return [];
     }
   }
 
-  // Get a specific chat
-  async getChat(chatId: string): Promise<Chat | null> {
-    try {
-      console.log('🧪 ChatService: Getting chat:', chatId);
-      
-      const chatDoc = await getDoc(doc(db, COLLECTIONS.CHATS, chatId));
-      
-      if (!chatDoc.exists()) {
-        console.log('🧪 ChatService: Chat not found');
-        return null;
-      }
-
-      const data = chatDoc.data();
-      const chat: Chat = {
-        id: chatDoc.id,
-        participants: data.participants || [],
-        participantNames: data.participantNames || {},
-        lastMessage: data.lastMessage || '',
-        lastMessageTime: data.lastMessageTime?.toDate() || new Date(),
-        lastMessageSender: data.lastMessageSender,
-        eventId: data.eventId,
-        eventName: data.eventName,
-        isActive: data.isActive || true,
-        createdAt: data.createdAt?.toDate() || new Date(),
-        matchId: data.matchId,
-        unreadCount: data.unreadCount || {}
-      };
-
-      console.log('🧪 ChatService: Chat retrieved successfully');
-      return chat;
-      
-    } catch (error) {
-      console.error('🧪 ChatService: Error getting chat:', error);
-      throw error;
+  /**
+   * 🎯 LISTEN TO USER'S CHATS (REAL-TIME)
+   * Returns a callback function to listen to user's chats with real-time updates
+   */
+  listenToUserChats(callback: (chats: Chat[]) => void): () => void {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      console.error('🧪 ❌ No authenticated user');
+      return () => {};
     }
-  }
 
-  // Delete a chat (for both participants)
-  async deleteChat(chatId: string, userId: string): Promise<void> {
-    try {
-      console.log('🧪 ChatService: Deleting chat:', chatId);
-      
-      const chatDoc = await getDoc(doc(db, COLLECTIONS.CHATS, chatId));
-      if (!chatDoc.exists()) {
-        throw new Error('Chat not found');
-      }
+    console.log(`🧪 👂 Starting user chats listener for: ${currentUser.uid}`);
 
-      const chatData = chatDoc.data() as Chat;
-      if (!chatData.participants.includes(userId)) {
-        throw new Error('User not authorized to delete this chat');
-      }
+    const chatsQuery = query(
+      collection(db, COLLECTIONS.CHATS),
+      where('participants', 'array-contains', currentUser.uid),
+      orderBy('lastMessageTime', 'desc')
+    );
 
-      const batch = writeBatch();
-      
-      // Delete all messages
-      const messagesQuery = query(collection(db, COLLECTIONS.CHATS, chatId, COLLECTIONS.MESSAGES));
-      const messagesSnapshot = await getDocs(messagesQuery);
-      messagesSnapshot.forEach(doc => {
-        batch.delete(doc.ref);
-      });
-      
-      // Delete the chat
-      batch.delete(doc(db, COLLECTIONS.CHATS, chatId));
-      
-      await batch.commit();
-      console.log('🧪 ChatService: Chat deleted successfully');
-      
-    } catch (error) {
-      console.error('🧪 ChatService: Error deleting chat:', error);
-      throw error;
-    }
-  }
+    const unsubscribe = onSnapshot(chatsQuery, (snapshot) => {
+      const chats: Chat[] = snapshot.docs.map(doc => ({
+        chatId: doc.id,
+        ...doc.data()
+      } as Chat));
 
-  // Set typing indicator
-  async setTyping(chatId: string, userId: string, isTyping: boolean): Promise<void> {
-    try {
-      await updateDoc(doc(db, COLLECTIONS.CHATS, chatId), {
-        [`typing.${userId}`]: isTyping
-      });
-    } catch (error) {
-      console.error('🧪 ChatService: Error setting typing indicator:', error);
-    }
-  }
-
-  // Get typing indicators for a chat
-  onTyping(chatId: string, callback: (typingUsers: { [userId: string]: boolean }) => void): () => void {
-    const unsubscribe = onSnapshot(doc(db, COLLECTIONS.CHATS, chatId), (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        callback(data.typing || {});
-      } else {
-        callback({});
-      }
+      console.log(`🧪 💬 Received ${chats.length} chats`);
+      callback(chats);
+    }, (error) => {
+      console.error('🧪 ❌ Error listening to user chats', error);
     });
 
     return unsubscribe;
   }
 
-  // Send event-related message
-  async sendEventMessage(chatId: string, senderId: string, eventId: string, eventName: string, message: string): Promise<string> {
-    return this.sendMessage(chatId, senderId, `🎪 ${eventName}: ${message}`, 'event');
+  // Private helper methods
+  private async findExistingChat(participantIds: string[]): Promise<Chat | null> {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) return null;
+
+      const chatsQuery = query(
+        collection(db, COLLECTIONS.CHATS),
+        where('participants', 'array-contains', currentUser.uid)
+      );
+
+      const snapshot = await getDocs(chatsQuery);
+      
+      for (const doc of snapshot.docs) {
+        const chat = doc.data() as Chat;
+        const chatParticipants = chat.participants || [];
+        
+        // Check if all participants match (order doesn't matter)
+        if (participantIds.length === chatParticipants.length &&
+            participantIds.every(id => chatParticipants.includes(id))) {
+          return { ...chat, chatId: doc.id };
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error('🧪 ❌ Error finding existing chat', error);
+      return null;
+    }
   }
 
-  // Get unread message count for a user
-  async getUnreadCount(userId: string): Promise<number> {
-    try {
-      const chats = await this.getUserChats(userId);
-      let totalUnread = 0;
-      
-      chats.forEach(chat => {
-        totalUnread += chat.unreadCount?.[userId] || 0;
-      });
-      
-      return totalUnread;
-    } catch (error) {
-      console.error('🧪 ChatService: Error getting unread count:', error);
-      return 0;
-    }
+  private generateChatId(participantIds: string[]): string {
+    return participantIds.sort().join('_');
   }
 }
 
 export const chatService = new ChatService();
+
+// Helper type for results
+interface Result<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
 
 

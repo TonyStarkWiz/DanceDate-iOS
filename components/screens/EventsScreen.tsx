@@ -1,45 +1,55 @@
+import { BackButton } from '@/components/ui/BackButton';
+import { MatchNotification } from '@/components/ui/MatchNotification';
+import { useAuth } from '@/contexts/AuthContext';
+import { DanceEvent, eventsApiService } from '@/services/eventsApiService';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     FlatList,
     RefreshControl,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { DanceEventsApiService } from '../../services/danceEventsApi';
-import { DanceEvent } from '../../types/event';
 import { ThemedText } from '../ThemedText';
 
 export default function EventsScreen() {
+  const { user } = useAuth();
   const [events, setEvents] = useState<DanceEvent[]>([]);
-  const [filteredEvents, setFilteredEvents] = useState<DanceEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [location, setLocation] = useState('Worldwide'); // Default location
+  const [matchingEventId, setMatchingEventId] = useState<number | null>(null);
+  const [showMatchNotification, setShowMatchNotification] = useState(false);
+  const [currentMatch, setCurrentMatch] = useState<{
+    partnerName: string;
+    eventTitle: string;
+    partnerId: string;
+    chatId?: string;
+  } | null>(null);
 
   useEffect(() => {
     loadEvents();
   }, []);
 
-  useEffect(() => {
-    filterEvents();
-  }, [searchQuery, events]);
-
   const loadEvents = async () => {
     try {
       setLoading(true);
-      const fetchedEvents = await DanceEventsApiService.searchEvents(location, 25);
+      console.log('🧪 EventsScreen: Loading events from Dance Events API');
+      const fetchedEvents = await eventsApiService.fetchEvents(1, 25);
+      console.log('🧪 EventsScreen: Raw API response:', JSON.stringify(fetchedEvents, null, 2));
+      console.log('🧪 EventsScreen: Number of events:', fetchedEvents.length);
+      console.log('🧪 EventsScreen: First event:', fetchedEvents[0]);
       setEvents(fetchedEvents);
+      console.log('🧪 EventsScreen: Loaded', fetchedEvents.length, 'events');
     } catch (error) {
-      console.error('Failed to load events:', error);
-      // Show error state
+      console.error('🧪 ❌ Failed to load events:', error);
+      Alert.alert('Error', 'Failed to load events. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -51,47 +61,77 @@ export default function EventsScreen() {
     setRefreshing(false);
   };
 
-  const filterEvents = () => {
-    if (!searchQuery.trim()) {
-      setFilteredEvents(events);
+  const handleMarkInterest = async (event: DanceEvent) => {
+    if (!user) {
+      Alert.alert('Please log in', 'You need to be logged in to mark interest in events.');
       return;
     }
 
-    const filtered = events.filter(event =>
-      event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
-    setFilteredEvents(filtered);
+    try {
+      setMatchingEventId(event.id);
+      console.log(`🧪 🎯 Marking interest in event: ${event.name} (${event.id})`);
+
+      const result = await eventsApiService.markInterestInEvent(event);
+
+      if (result.success && result.matched && result.partnerName) {
+        console.log(`🧪 🎉 Bilateral match found with: ${result.partnerName}`);
+        setCurrentMatch({
+          partnerName: result.partnerName,
+          eventTitle: event.name,
+          partnerId: 'unknown' // We'll get this from the match result
+        });
+        setShowMatchNotification(true);
+      } else if (result.success) {
+        console.log(`🧪 ℹ️ Interest marked, no bilateral match yet`);
+        Alert.alert(
+          'Interest Marked!',
+          `You've shown interest in "${event.name}". We'll notify you when someone else is interested too!`
+        );
+      } else {
+        Alert.alert('Error', 'Failed to mark interest. Please try again.');
+      }
+    } catch (error) {
+      console.error('🧪 ❌ Error marking interest:', error);
+      Alert.alert('Error', 'Failed to mark interest. Please try again.');
+    } finally {
+      setMatchingEventId(null);
+    }
   };
 
   const renderEventItem = ({ item }: { item: DanceEvent }) => (
     <TouchableOpacity style={styles.eventCard}>
       <View style={styles.eventHeader}>
         <ThemedText type="subtitle" style={styles.eventTitle}>
-          {item.title}
+          {item.name}
         </ThemedText>
         <View style={styles.eventMeta}>
           <Ionicons name="location-outline" size={16} color="#666" />
-          <Text style={styles.eventLocation}>{item.location}</Text>
+          <Text style={styles.eventLocation}>
+            {item.location.name || item.location.city}, {item.location.country}
+          </Text>
         </View>
       </View>
       
       <View style={styles.eventDetails}>
         <View style={styles.eventInfo}>
-          <Ionicons name="person-outline" size={16} color="#666" />
-          <Text style={styles.eventInstructor}>{item.instructor}</Text>
+          <Ionicons name="calendar-outline" size={16} color="#666" />
+          <Text style={styles.eventDate}>
+            {new Date(item.startDate).toLocaleDateString()}
+            {item.endDate && item.endDate !== item.startDate && 
+              ` - ${new Date(item.endDate).toLocaleDateString()}`
+            }
+          </Text>
         </View>
         
         <View style={styles.eventTags}>
-          {item.tags.slice(0, 3).map((tag, index) => (
+          {Object.values(item.dances).slice(0, 3).map((dance, index) => (
             <View key={index} style={styles.tag}>
-              <Text style={styles.tagText}>{tag}</Text>
+              <Text style={styles.tagText}>{dance}</Text>
             </View>
           ))}
-          {item.tags.length > 3 && (
+          {Object.values(item.dances).length > 3 && (
             <View style={styles.tag}>
-              <Text style={styles.tagText}>+{item.tags.length - 3}</Text>
+              <Text style={styles.tagText}>+{Object.values(item.dances).length - 3}</Text>
             </View>
           )}
         </View>
@@ -104,6 +144,25 @@ export default function EventsScreen() {
           </Text>
         </View>
       )}
+
+      {/* Interest Button */}
+      <TouchableOpacity
+        style={[
+          styles.interestButton,
+          matchingEventId === item.id && styles.interestButtonLoading
+        ]}
+        onPress={() => handleMarkInterest(item)}
+        disabled={matchingEventId === item.id}
+      >
+        {matchingEventId === item.id ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <>
+            <Ionicons name="heart-outline" size={20} color="#fff" />
+            <Text style={styles.interestButtonText}>I'm Interested</Text>
+          </>
+        )}
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 
@@ -121,26 +180,12 @@ export default function EventsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <BackButton />
         <ThemedText type="title">Dance Events</ThemedText>
-        <TouchableOpacity style={styles.locationButton}>
-          <Ionicons name="location" size={20} color="#A1CEDC" />
-          <Text style={styles.locationText}>{location}</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search events, locations, or dance styles..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholderTextColor="#999"
-        />
       </View>
 
       <FlatList
-        data={filteredEvents}
+        data={events}
         renderItem={renderEventItem}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.eventsList}
@@ -152,11 +197,26 @@ export default function EventsScreen() {
             <Ionicons name="calendar-outline" size={64} color="#ccc" />
             <ThemedText type="subtitle">No events found</ThemedText>
             <Text style={styles.emptyText}>
-              Try adjusting your search or location
+              No dance events available at the moment
             </Text>
           </View>
         }
       />
+
+      {/* High-Conversion Match Notification */}
+      {currentMatch && (
+        <MatchNotification
+          visible={showMatchNotification}
+          match={currentMatch}
+          onClose={() => {
+            setShowMatchNotification(false);
+            setCurrentMatch(null);
+          }}
+          onStartChat={() => {
+            router.push('/matches');
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -168,45 +228,19 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    paddingBottom: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
-  locationButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  locationText: {
-    marginLeft: 4,
-    color: '#666',
-    fontSize: 14,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    marginHorizontal: 20,
-    marginBottom: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 25,
-  },
-  searchIcon: {
-    marginRight: 12,
-  },
-  searchInput: {
+  loadingContainer: {
     flex: 1,
-    fontSize: 16,
-    color: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   eventsList: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    padding: 20,
   },
   eventCard: {
     backgroundColor: '#fff',
@@ -214,10 +248,13 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   eventHeader: {
     marginBottom: 12,
@@ -225,34 +262,35 @@ const styles = StyleSheet.create({
   eventTitle: {
     fontSize: 18,
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 4,
+    color: '#333',
   },
   eventMeta: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   eventLocation: {
-    marginLeft: 6,
-    color: '#666',
     fontSize: 14,
+    color: '#666',
+    marginLeft: 4,
   },
   eventDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    marginBottom: 12,
   },
   eventInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 8,
   },
-  eventInstructor: {
-    marginLeft: 6,
-    color: '#666',
+  eventDate: {
     fontSize: 14,
+    color: '#666',
+    marginLeft: 4,
   },
   eventTags: {
     flexDirection: 'row',
-    gap: 8,
+    flexWrap: 'wrap',
+    gap: 6,
   },
   tag: {
     backgroundColor: '#A1CEDC',
@@ -261,14 +299,35 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   tagText: {
-    color: '#fff',
     fontSize: 12,
+    color: '#fff',
     fontWeight: '500',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  eventDescription: {
+    marginBottom: 16,
+  },
+  descriptionText: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+  },
+  interestButton: {
+    backgroundColor: '#FF6B6B',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    gap: 8,
+  },
+  interestButtonLoading: {
+    backgroundColor: '#ccc',
+  },
+  interestButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   emptyState: {
     flex: 1,
@@ -277,20 +336,10 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyText: {
+    fontSize: 16,
     color: '#999',
     textAlign: 'center',
     marginTop: 8,
-  },
-  eventDescription: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  descriptionText: {
-    color: '#666',
-    fontSize: 14,
-    lineHeight: 20,
   },
 });
 
@@ -298,5 +347,3 @@ const styles = StyleSheet.create({
 
 
 
-import { BackButton } from '../ui/BackButton';
-      <BackButton />

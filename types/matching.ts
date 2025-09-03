@@ -21,6 +21,12 @@ export interface Match {
   createdAt: Date;
   lastInteraction: Date;
   isMutual: boolean;
+  // Additional fields from your Firestore structure
+  partnerName?: string;
+  partnerLocation?: string;
+  partnerBio?: string;
+  matchType?: string;
+  partnerInterests?: string[];
 }
 
 export enum MatchStatus {

@@ -30,19 +30,33 @@ const db = getFirestore(app);
 
 // Firestore collections
 export const COLLECTIONS = {
-  USERS: 'users',
-  PROFILES: 'profiles',
-  EVENTS: 'events',
-  MATCHES: 'matches',
-  LIKES: 'likes',
-  DISLIKES: 'dislikes',
-  CHATS: 'chats',
-  MESSAGES: 'messages',
-  API_LOGS: 'api_logs',
-  EVENT_INTERESTS: 'event_interests',
-  EVENT_MATCHES: 'event_matches',
-  DANCE_STYLES: 'danceStyles',
-  LOCATIONS: 'locations'
+  USERS: 'users',                    // ✅ Used extensively
+  EVENTS: 'events',                  // ✅ Used for events
+  MATCHES: 'matches',                // ✅ Used for user matches
+  CHATS: 'chats',                   // ✅ Used for chat rooms
+  MESSAGES: 'messages',              // ✅ Used as subcollection of chats
+  API_LOGS: 'api_logs',             // ✅ Used as 'api_call_logs'
+  DANCE_VIDEOS: 'dance_videos',           // ✅ Used for video content
+  DANCE_EVENTS: 'dance_events',           // ✅ Used for events
+  DANCE_EVENTS_FLAT: 'dance_events_flat', // ✅ Used for flattened events
+  INTERESTED_EVENTS: 'interested_events', // ✅ Used for user event interests
+  INTERESTED_USERS: 'interested_users',   // ✅ Used for event user interests
+  PROMO_CODES: 'promo_codes',             // ✅ Used for promotional codes
+  USER_CREDITS: 'user_credits',          // ✅ Used for user credits
+  BLOCKED: 'blocked',                    // ✅ Used for blocked users
+  REPORTS: 'reports',                    // ✅ Used for user reports
+  PRESENCE: 'presence',                  // ✅ Used for user presence
+  PREMIUM_CONTENT: 'premium_content',     // ✅ Used for premium features
+  USER_LOCATIONS: 'user_locations',       // ✅ Used for user location data
+  CACHED_EVENTS: 'cached_events',         // ✅ Used for event caching
+  USAGE: 'usage',                        // ✅ Used for usage tracking
+  GOOGLE_CUSTOM_SEARCH_USAGE: 'google_custom_search_usage', // ✅ Used for search tracking
+  CHAT_MESSAGE_USAGE: 'chat_message_usage', // ✅ Used for chat usage
+  GOOGLE_SEARCH_CACHE: 'google_search_cache', // ✅ Used for search caching
+  PHASE1_USAGE_TRACKING: 'phase1_usage_tracking', // ✅ Used for usage tracking
+  DANCE_POSTS: 'dance_posts',            // ✅ Used for feed posts
+  BOOKED_EVENTS: 'booked_events',        // ✅ Used for booked events
+  TYPING: 'typing',                      // ✅ Used as subcollection of chats
 } as const;
 
 // Firestore service functions

@@ -1,207 +1,231 @@
-import { BackButton } from '@/components/ui/BackButton';
 import { COLLECTIONS, db } from '@/config/firebase';
 import { useAuth } from '@/contexts/AuthContext';
-import { Ionicons } from '@expo/vector-icons';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
+    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 
 export const FirestoreDebugScreen: React.FC = () => {
   const { user } = useAuth();
-  const [debugResults, setDebugResults] = useState<string[]>([]);
+  const [matchesData, setMatchesData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string>('');
 
-  const addResult = (result: string) => {
-    setDebugResults(prev => [...prev, `${new Date().toLocaleTimeString()}: ${result}`]);
-  };
-
-  const clearResults = () => {
-    setDebugResults([]);
-  };
-
-  const testDirectFirestore = async () => {
-    try {
-      setLoading(true);
-      addResult('🧪 Testing direct Firestore access...');
-      
-      // Test 1: Check if we can access Firestore at all
-      addResult('🧪 Testing basic Firestore connection...');
-      const testQuery = query(collection(db, COLLECTIONS.EVENT_INTERESTS));
-      const testSnapshot = await getDocs(testQuery);
-      addResult(`🧪 ✅ Firestore connection works! Found ${testSnapshot.size} total documents`);
-      
-      // Test 2: Check all event interests
-      addResult('🧪 Checking all event_interests documents...');
-      const interestsSnapshot = await getDocs(collection(db, COLLECTIONS.EVENT_INTERESTS));
-      addResult(`🧪 Total event_interests: ${interestsSnapshot.size}`);
-      
-      if (interestsSnapshot.size > 0) {
-        interestsSnapshot.forEach((doc, index) => {
-          const data = doc.data();
-          addResult(`🧪 Doc ${index + 1}: ID=${doc.id}, User=${data.userId}, Event=${data.eventTitle}`);
-        });
-      }
-      
-      // Test 3: Check user's interests specifically
-      if (user?.id) {
-        addResult(`🧪 Checking interests for user: ${user.id}`);
-        const userInterestsQuery = query(
-          collection(db, COLLECTIONS.EVENT_INTERESTS),
-          where('userId', '==', user.id)
-        );
-        const userInterestsSnapshot = await getDocs(userInterestsQuery);
-        addResult(`🧪 User interests: ${userInterestsSnapshot.size}`);
-        
-        userInterestsSnapshot.forEach((doc, index) => {
-          const data = doc.data();
-          addResult(`🧪 User Interest ${index + 1}: ${data.eventTitle} (${data.eventId})`);
-        });
-      }
-      
-      // Test 4: Check users collection
-      addResult('🧪 Checking users collection...');
-      const usersSnapshot = await getDocs(collection(db, COLLECTIONS.USERS));
-      addResult(`🧪 Total users: ${usersSnapshot.size}`);
-      
-      if (usersSnapshot.size > 0) {
-        usersSnapshot.forEach((doc, index) => {
-          const data = doc.data();
-          addResult(`🧪 User ${index + 1}: ${data.email || data.name || 'Unknown'} (${doc.id})`);
-        });
-      }
-      
-    } catch (error) {
-      addResult(`🧪 ❌ Firestore error: ${error.message}`);
-      console.error('🧪 FirestoreDebugScreen error:', error);
-    } finally {
-      setLoading(false);
+  const debugMatchesCollection = async () => {
+    if (!user?.id) {
+      Alert.alert('Error', 'No user logged in');
+      return;
     }
-  };
 
-  const testUserAuth = () => {
-    addResult('🧪 Testing user authentication...');
-    addResult(`🧪 User ID: ${user?.id || 'NO USER ID'}`);
-    addResult(`🧪 User Email: ${user?.email || 'NO EMAIL'}`);
-    addResult(`🧪 User Name: ${user?.name || 'NO NAME'}`);
-    addResult(`🧪 Auth State: ${user ? 'LOGGED IN' : 'NOT LOGGED IN'}`);
-  };
+    setLoading(true);
+    setDebugInfo('');
 
-  const testCollections = async () => {
     try {
-      setLoading(true);
-      addResult('🧪 Testing all collections...');
-      
-      const collections = [
-        COLLECTIONS.USERS,
-        COLLECTIONS.EVENT_INTERESTS,
-        COLLECTIONS.EVENT_MATCHES,
-        COLLECTIONS.LIKES,
-        COLLECTIONS.DISLIKES,
-        COLLECTIONS.CHATS,
-        COLLECTIONS.MESSAGES
-      ];
-      
-      for (const collectionName of collections) {
-        try {
-          const snapshot = await getDocs(collection(db, collectionName));
-          addResult(`🧪 ${collectionName}: ${snapshot.size} documents`);
-        } catch (error) {
-          addResult(`🧪 ❌ ${collectionName}: Error - ${error.message}`);
-        }
+      console.log('🧪 FirestoreDebugScreen: Starting debug for user:', user.id);
+      setDebugInfo(`🧪 Debugging for user: ${user.id}\n`);
+
+      // 1. First, get the user document to see the matches array
+      const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, user.id));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        console.log('🧪 FirestoreDebugScreen: User document data:', userData);
+        setDebugInfo(prev => prev + `🧪 User document data:\n${JSON.stringify(userData, null, 2)}\n`);
+        
+        const userMatches = userData.matches || [];
+        setDebugInfo(prev => prev + `🧪 User matches array: ${userMatches.length} items\n`);
+        setDebugInfo(prev => prev + `🧪 User matches array content:\n${JSON.stringify(userMatches, null, 2)}\n`);
+      } else {
+        setDebugInfo(prev => prev + `🧪 User document not found!\n`);
       }
+
+      // 2. Get all documents in matches collection
+      const allMatchesQuery = query(collection(db, COLLECTIONS.MATCHES));
+      const allMatchesSnapshot = await getDocs(allMatchesQuery);
       
+      console.log('🧪 FirestoreDebugScreen: Total documents in matches collection:', allMatchesSnapshot.size);
+      setDebugInfo(prev => prev + `🧪 Total documents in matches collection: ${allMatchesSnapshot.size}\n`);
+
+      const allMatches: any[] = [];
+      allMatchesSnapshot.forEach(doc => {
+        const data = doc.data();
+        allMatches.push({
+          id: doc.id,
+          ...data
+        });
+        console.log('🧪 FirestoreDebugScreen: Document:', doc.id, 'Data:', data);
+      });
+
+      setDebugInfo(prev => prev + `🧪 All matches documents:\n${JSON.stringify(allMatches, null, 2)}\n`);
+
+      // Query for specific user matches
+      const userMatchesQuery1 = query(
+        collection(db, COLLECTIONS.MATCHES),
+        where('userId1', '==', user.id)
+      );
+      
+      const userMatchesQuery2 = query(
+        collection(db, COLLECTIONS.MATCHES),
+        where('userId2', '==', user.id)
+      );
+
+      const [userMatches1, userMatches2] = await Promise.all([
+        getDocs(userMatchesQuery1),
+        getDocs(userMatchesQuery2)
+      ]);
+
+      console.log('🧪 FirestoreDebugScreen: User matches as userId1:', userMatches1.size);
+      console.log('🧪 FirestoreDebugScreen: User matches as userId2:', userMatches2.size);
+      
+      setDebugInfo(prev => prev + `🧪 User matches as userId1: ${userMatches1.size}\n`);
+      setDebugInfo(prev => prev + `🧪 User matches as userId2: ${userMatches2.size}\n`);
+
+      const userMatches: any[] = [];
+      
+      userMatches1.forEach(doc => {
+        const data = doc.data();
+        userMatches.push({
+          id: doc.id,
+          ...data,
+          userRole: 'userId1'
+        });
+        console.log('🧪 FirestoreDebugScreen: User match as userId1:', doc.id, data);
+      });
+
+      userMatches2.forEach(doc => {
+        const data = doc.data();
+        userMatches.push({
+          id: doc.id,
+          ...data,
+          userRole: 'userId2'
+        });
+        console.log('🧪 FirestoreDebugScreen: User match as userId2:', doc.id, data);
+      });
+
+      setMatchesData(userMatches);
+      setDebugInfo(prev => prev + `🧪 User matches found: ${userMatches.length}\n`);
+      setDebugInfo(prev => prev + `🧪 User matches data:\n${JSON.stringify(userMatches, null, 2)}\n`);
+
+      // 4. Check other collections that might contain match data
+      setDebugInfo(prev => prev + `🧪 Checking other collections...\n`);
+      
+      // Check event_matches collection
+      try {
+        const eventMatchesQuery = query(collection(db, COLLECTIONS.EVENT_MATCHES));
+        const eventMatchesSnapshot = await getDocs(eventMatchesQuery);
+        setDebugInfo(prev => prev + `🧪 Event matches collection: ${eventMatchesSnapshot.size} documents\n`);
+        
+        const eventMatches: any[] = [];
+        eventMatchesSnapshot.forEach(doc => {
+          const data = doc.data();
+          if (data.userId1 === user.id || data.userId2 === user.id) {
+            eventMatches.push({
+              id: doc.id,
+              ...data
+            });
+          }
+        });
+        
+        if (eventMatches.length > 0) {
+          setDebugInfo(prev => prev + `🧪 User event matches:\n${JSON.stringify(eventMatches, null, 2)}\n`);
+        }
+      } catch (error) {
+        setDebugInfo(prev => prev + `🧪 Event matches collection error: ${error}\n`);
+      }
+
+      // Check participants collection
+      try {
+        const participantsQuery = query(collection(db, 'participants'));
+        const participantsSnapshot = await getDocs(participantsQuery);
+        setDebugInfo(prev => prev + `🧪 Participants collection: ${participantsSnapshot.size} documents\n`);
+        
+        const userParticipants: any[] = [];
+        participantsSnapshot.forEach(doc => {
+          const data = doc.data();
+          if (data.userId === user.id) {
+            userParticipants.push({
+              id: doc.id,
+              ...data
+            });
+          }
+        });
+        
+        if (userParticipants.length > 0) {
+          setDebugInfo(prev => prev + `🧪 User participants:\n${JSON.stringify(userParticipants, null, 2)}\n`);
+        }
+      } catch (error) {
+        setDebugInfo(prev => prev + `🧪 Participants collection error: ${error}\n`);
+      }
+
     } catch (error) {
-      addResult(`🧪 ❌ Collections test error: ${error.message}`);
+      console.error('🧪 FirestoreDebugScreen: Error debugging matches:', error);
+      setDebugInfo(prev => prev + `🧪 Error: ${error}\n`);
+      Alert.alert('Error', 'Failed to debug matches collection');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <BackButton />
-      
+    <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Firestore Debug</Text>
-        <Text style={styles.subtitle}>Direct database access testing</Text>
+        <Text style={styles.title}>🧪 Firestore Debug</Text>
+        <Text style={styles.subtitle}>Debug matches collection</Text>
       </View>
 
-      <View style={styles.testButtons}>
-        <TouchableOpacity
-          style={styles.testButton}
-          onPress={testUserAuth}
-          disabled={loading}
-        >
-          <Ionicons name="person-outline" size={20} color="#fff" />
-          <Text style={styles.testButtonText}>Test User Auth</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.testButton}
-          onPress={testDirectFirestore}
-          disabled={loading}
-        >
-          <Ionicons name="database-outline" size={20} color="#fff" />
-          <Text style={styles.testButtonText}>Test Firestore Direct</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.testButton}
-          onPress={testCollections}
-          disabled={loading}
-        >
-          <Ionicons name="folder-outline" size={20} color="#fff" />
-          <Text style={styles.testButtonText}>Test All Collections</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.testButton, { backgroundColor: '#ff4444' }]}
-          onPress={clearResults}
-          disabled={loading}
-        >
-          <Ionicons name="trash-outline" size={20} color="#fff" />
-          <Text style={styles.testButtonText}>Clear Results</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity 
+        style={styles.debugButton} 
+        onPress={debugMatchesCollection}
+        disabled={loading}
+      >
+        <Text style={styles.debugButtonText}>
+          {loading ? 'Debugging...' : 'Debug Matches Collection'}
+        </Text>
+      </TouchableOpacity>
 
       {loading && (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6A4C93" />
-          <Text style={styles.loadingText}>Querying Firestore...</Text>
+          <ActivityIndicator size="large" color="#6A11CB" />
+          <Text style={styles.loadingText}>Debugging Firestore...</Text>
         </View>
       )}
 
-      <ScrollView style={styles.resultsContainer}>
-        <Text style={styles.resultsTitle}>Debug Results:</Text>
-        {debugResults.length === 0 ? (
-          <Text style={styles.noResults}>No tests run yet. Click a test button above.</Text>
-        ) : (
-          debugResults.map((result, index) => (
-            <Text key={index} style={styles.resultText}>
-              {result}
-            </Text>
-          ))
-        )}
+      <ScrollView style={styles.debugContainer}>
+        <Text style={styles.debugText}>{debugInfo}</Text>
       </ScrollView>
-    </View>
+
+      {matchesData.length > 0 && (
+        <View style={styles.matchesContainer}>
+          <Text style={styles.matchesTitle}>Found Matches:</Text>
+          {matchesData.map((match, index) => (
+            <View key={index} style={styles.matchItem}>
+              <Text style={styles.matchText}>ID: {match.id}</Text>
+              <Text style={styles.matchText}>User Role: {match.userRole}</Text>
+              <Text style={styles.matchText}>Status: {match.status}</Text>
+              <Text style={styles.matchText}>Match Strength: {match.matchStrength}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#4A148C',
+    backgroundColor: '#f8f9fa',
   },
   header: {
-    alignItems: 'center',
-    paddingVertical: 20,
+    padding: 20,
+    backgroundColor: '#6A11CB',
   },
   title: {
     fontSize: 24,
@@ -211,54 +235,61 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.8)',
   },
-  testButtons: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  testButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  debugButton: {
     backgroundColor: '#6A11CB',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
-    marginBottom: 10,
+    margin: 20,
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
   },
-  testButtonText: {
+  debugButtonText: {
     color: '#fff',
-    marginLeft: 8,
-    fontWeight: '500',
+    fontSize: 16,
+    fontWeight: '600',
   },
   loadingContainer: {
     alignItems: 'center',
-    paddingVertical: 20,
+    padding: 20,
   },
   loadingText: {
-    color: '#fff',
     marginTop: 10,
+    fontSize: 16,
+    color: '#666',
   },
-  resultsContainer: {
+  debugContainer: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    padding: 20,
   },
-  resultsTitle: {
+  debugText: {
+    fontSize: 12,
+    fontFamily: 'monospace',
+    color: '#333',
+    lineHeight: 18,
+  },
+  matchesContainer: {
+    padding: 20,
+    backgroundColor: '#fff',
+    margin: 20,
+    borderRadius: 10,
+  },
+  matchesTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
     marginBottom: 10,
+    color: '#333',
   },
-  noResults: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontStyle: 'italic',
+  matchItem: {
+    backgroundColor: '#f8f9fa',
+    padding: 10,
+    marginBottom: 5,
+    borderRadius: 5,
   },
-  resultText: {
-    color: '#fff',
-    fontSize: 11,
-    marginBottom: 3,
-    fontFamily: 'monospace',
+  matchText: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 2,
   },
 });
 

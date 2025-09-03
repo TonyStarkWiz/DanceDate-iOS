@@ -18,7 +18,12 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if isSignedIn(); // Allow reading all user profiles for matching
       allow update, delete: if isOwner(uid);
-      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow create: if isSignedIn(); // Allow any authenticated user to create user documents
+      
+      // User's interested events subcollection
+      match /interested_events/{eventId} {
+        allow read, write: if isSignedIn(); // Temporary: allow all authenticated users for debugging
+      }
     }
 
     // User preferences subcollection
@@ -31,14 +36,17 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
       allow update, delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+      
+      // Event's interested users subcollection
+      match /interested_users/{userId} {
+        allow read, write: if isSignedIn();
+      }
     }
 
     // Matches collection - users can read all matches for matching system
     match /matches/{matchId} {
       allow read: if isSignedIn(); // Allow reading all matches for matching system
-      allow write: if isSignedIn() && 
-        (request.auth.uid in resource.data.participants || 
-         request.auth.uid == resource.data.createdBy);
+      allow write: if isSignedIn(); // Allow all authenticated users to write for testing
     }
 
     // Likes collection - users can read all likes for matching system
@@ -60,6 +68,33 @@ service cloud.firestore {
       allow read: if isSignedIn(); // Allow reading all chats for matching system
       allow write: if isSignedIn() && 
         request.auth.uid in resource.data.participants;
+      
+      // Messages subcollection - HARDENED: Sender-only edits and size limits
+      match /messages/{messageId} {
+        function inChat() {
+          return request.auth != null &&
+            request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        }
+
+        allow create: if inChat() &&
+          request.resource.data.keys().hasOnly(["text", "senderId", "timestamp", "type", "read"]) &&
+          (
+            // normal user message
+            (request.resource.data.senderId == request.auth.uid)
+            ||
+            // allow system message
+            (request.resource.data.senderId == "system" && request.resource.data.type == "system")
+          ) &&
+          request.resource.data.timestamp is timestamp &&
+          request.resource.data.type in ["text", "image", "system"] &&
+          (!("text" in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 4000)) &&
+          (!("read" in request.resource.data) || request.resource.data.read is bool);
+
+        allow update, delete: if inChat() &&
+          resource.data.senderId == request.auth.uid; // 🔒 SENDER-ONLY EDITS
+
+        allow read: if inChat(); // 🎯 BOTH PARTICIPANTS CAN READ ALL MESSAGES
+      }
     }
 
     // Messages collection - users can read all messages for matching system

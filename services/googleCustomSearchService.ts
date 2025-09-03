@@ -27,7 +27,7 @@ export interface UsageData {
 // Google Custom Search HTTP Client - mirrors Android implementation
 export class GoogleCustomSearchHttpClient {
   private static instance: GoogleCustomSearchHttpClient;
-  private readonly apiKey = 'AIzaSyBTIR8d1fRiWDH5SUKmgZwyGXF1s1xfG0';
+  private readonly apiKey = 'AIzaSyBTIR8d1fRiWDH5SUKmgZwyGXnF1s1xfG0';
   private readonly searchEngineId = 'c63b840d0b01d4d28';
   private readonly baseUrl = 'https://www.googleapis.com/customsearch/v1';
   
@@ -339,3 +339,96 @@ export class GoogleCustomSearchUsageTracker {
 // Export singleton instances
 export const googleCustomSearchClient = GoogleCustomSearchHttpClient.getInstance();
 export const usageTracker = GoogleCustomSearchUsageTracker.getInstance();
+
+// Test function to check Google Custom Search functionality
+export async function testGoogleCustomSearch(): Promise<{
+  success: boolean;
+  error?: string;
+  results?: GoogleSearchResult[];
+  apiKey?: string;
+  searchEngineId?: string;
+}> {
+  try {
+    console.log('🧪 Testing Google Custom Search...');
+    
+    const client = GoogleCustomSearchHttpClient.getInstance();
+    
+    // Test basic search
+    const testQuery = 'salsa dance events';
+    const testLocation = 'New York';
+    
+    console.log('🧪 Testing search with query:', testQuery, 'location:', testLocation);
+    
+    const results = await client.searchDanceEvents(testQuery, testLocation, 5);
+    
+    console.log('🧪 Search results:', results);
+    
+    return {
+      success: true,
+      results: results,
+      apiKey: client['apiKey']?.substring(0, 10) + '...',
+      searchEngineId: client['searchEngineId']
+    };
+    
+  } catch (error) {
+    console.error('🧪 Google Custom Search test failed:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+
+// Test function to check API credentials
+export async function testGoogleCustomSearchCredentials(): Promise<{
+  apiKeyValid: boolean;
+  searchEngineIdValid: boolean;
+  apiKey?: string;
+  searchEngineId?: string;
+  error?: string;
+}> {
+  try {
+    const client = GoogleCustomSearchHttpClient.getInstance();
+    
+    // Test API key and search engine ID
+    const testUrl = new URL('https://www.googleapis.com/customsearch/v1');
+    testUrl.searchParams.set('key', client['apiKey']);
+    testUrl.searchParams.set('cx', client['searchEngineId']);
+    testUrl.searchParams.set('q', 'test');
+    testUrl.searchParams.set('num', '1');
+    
+    console.log('🧪 Testing API credentials...');
+    console.log('🧪 API Key:', client['apiKey']?.substring(0, 10) + '...');
+    console.log('🧪 Search Engine ID:', client['searchEngineId']);
+    
+    const response = await fetch(testUrl.toString());
+    const data = await response.json();
+    
+    console.log('🧪 API Response:', data);
+    
+    if (data.error) {
+      return {
+        apiKeyValid: false,
+        searchEngineIdValid: false,
+        apiKey: client['apiKey']?.substring(0, 10) + '...',
+        searchEngineId: client['searchEngineId'],
+        error: data.error.message || 'API Error'
+      };
+    }
+    
+    return {
+      apiKeyValid: true,
+      searchEngineIdValid: true,
+      apiKey: client['apiKey']?.substring(0, 10) + '...',
+      searchEngineId: client['searchEngineId']
+    };
+    
+  } catch (error) {
+    console.error('🧪 Credential test failed:', error);
+    return {
+      apiKeyValid: false,
+      searchEngineIdValid: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}

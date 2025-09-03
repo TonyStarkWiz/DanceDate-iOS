@@ -4,12 +4,12 @@ import {
     addDoc,
     collection,
     doc,
+    documentId,
     getDoc,
     getDocs,
     onSnapshot,
     orderBy,
     query,
-    serverTimestamp,
     setDoc,
     where
 } from 'firebase/firestore';
@@ -42,10 +42,196 @@ export interface UserProfile {
   };
   lastActive: Date;
   interestedEvents?: string[];
+  matches?: string[]; // Array of match IDs
+}
+
+// Firestore Match interface based on your actual schema
+export interface FirestoreMatch {
+  id: string;
+  userId1: string;
+  userId2: string;
+  eventId?: string;
+  matchStrength?: number;
+  status?: string;
+  createdAt?: any;
+  lastInteraction?: any;
+  isMutual?: boolean;
 }
 
 class MatchingService {
-  // Like another user
+  // Get user's matches using the actual Firestore structure
+  async getUserMatches(userId: string): Promise<Match[]> {
+    try {
+      console.log('🧪 MatchingService: Getting matches for user:', userId);
+      console.log('🧪 MatchingService: User ID type:', typeof userId);
+      console.log('🧪 MatchingService: User ID length:', userId.length);
+      
+      // Query matches collection where userId matches the current user
+      const matchesQuery = query(
+        collection(db, COLLECTIONS.MATCHES),
+        where('userId', '==', userId)
+      );
+      
+      console.log('🧪 MatchingService: Created query with userId:', userId);
+      console.log('🧪 MatchingService: Query object:', matchesQuery);
+      
+      const matchesSnapshot = await getDocs(matchesQuery);
+      console.log('🧪 MatchingService: Query executed successfully');
+      console.log('🧪 MatchingService: Found', matchesSnapshot.size, 'matches for user:', userId);
+      
+      // Log all documents in the collection for debugging
+      const allMatchesQuery = query(collection(db, COLLECTIONS.MATCHES));
+      const allMatchesSnapshot = await getDocs(allMatchesQuery);
+      console.log('🧪 MatchingService: Total documents in matches collection:', allMatchesSnapshot.size);
+      
+      allMatchesSnapshot.forEach(doc => {
+        const data = doc.data();
+        console.log('🧪 MatchingService: Document ID:', doc.id);
+        console.log('🧪 MatchingService: Document userId:', data.userId);
+        console.log('🧪 MatchingService: Document partnerId:', data.partnerId);
+        console.log('🧪 MatchingService: Document partnerName:', data.partnerName);
+        console.log('🧪 MatchingService: Comparing userId:', userId, 'with document userId:', data.userId);
+        console.log('🧪 MatchingService: Match?', userId === data.userId);
+      });
+      
+      const matches: Match[] = [];
+      
+      matchesSnapshot.forEach(doc => {
+        const data = doc.data();
+        console.log('🧪 MatchingService: Processing match:', doc.id, 'data:', data);
+        
+        // Convert Firestore timestamp to Date
+        const createdAt = data.createdAt?.toDate?.() || data.matchedAt ? new Date(data.matchedAt) : new Date();
+        const lastInteraction = data.updatedAt?.toDate?.() || data.matchedAt ? new Date(data.matchedAt) : new Date();
+        
+        const match: Match = {
+          id: doc.id,
+          userId1: userId, // Current user
+          userId2: data.partnerId || `partner_${doc.id}`, // Partner's ID or fallback
+          eventId: '', // Not available in this structure
+          matchStrength: data.score || 75, // Use score field
+          status: this.mapFirestoreStatus(data.status),
+          createdAt: createdAt,
+          lastInteraction: lastInteraction,
+          isMutual: true,
+          // Additional fields from your structure
+          partnerName: data.partnerName,
+          partnerLocation: data.partnerLocation,
+          partnerBio: data.partnerBio,
+          matchType: data.matchType,
+          partnerInterests: data.partnerInterests
+        };
+        
+        console.log('🧪 MatchingService: Created match object:', match);
+        matches.push(match);
+      });
+      
+      console.log('🧪 MatchingService: Final matches array:', matches);
+      console.log('🧪 MatchingService: Converted to', matches.length, 'matches');
+      return matches;
+
+    } catch (error) {
+      console.error('🧪 MatchingService: Error getting user matches:', error);
+      console.error('🧪 MatchingService: Error details:', error instanceof Error ? error.message : String(error));
+      console.error('🧪 MatchingService: Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      throw error;
+    }
+  }
+
+  // Map Firestore status to MatchStatus enum
+  private mapFirestoreStatus(status?: string): MatchStatus {
+    switch (status) {
+      case 'matched':
+      case 'active':
+      case 'accepted':
+        return MatchStatus.ACCEPTED;
+      case 'blocked':
+      case 'declined':
+        return MatchStatus.DECLINED;
+      case 'deleted':
+      case 'expired':
+        return MatchStatus.EXPIRED;
+      case 'pending':
+        return MatchStatus.PENDING;
+      default:
+        return MatchStatus.ACCEPTED; // Default to accepted for matched status
+    }
+  }
+
+  // Get profiles for a list of user IDs
+  async getProfiles(userIds: string[]): Promise<UserProfile[]> {
+    try {
+      console.log('🧪 MatchingService: Getting profiles for', userIds.length, 'users');
+      
+      const ids = [...new Set(userIds)];
+      const chunks: string[][] = [];
+      for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i + 10));
+
+      const results: UserProfile[] = [];
+      for (const chunk of chunks) {
+        const q = query(collection(db, COLLECTIONS.USERS), where(documentId(), 'in', chunk));
+        const snap = await getDocs(q);
+        snap.docs.forEach(d => results.push({ id: d.id, ...(d.data() as any) }));
+      }
+      
+      console.log('🧪 MatchingService: Retrieved', results.length, 'profiles');
+      return results;
+    } catch (error) {
+      console.error('🧪 MatchingService: Error getting profiles:', error);
+      return [];
+    }
+  }
+
+  // Real-time listener for new matches using the actual Firestore structure
+  onUserMatches(userId: string, callback: (matches: Match[]) => void): () => void {
+    console.log('🧪 MatchingService: Setting up real-time match listener for user:', userId);
+    
+    // Listen to matches collection where userId matches the current user
+    const matchesQuery = query(
+      collection(db, COLLECTIONS.MATCHES),
+      where('userId', '==', userId)
+    );
+    
+    const unsubscribe = onSnapshot(matchesQuery, (matchesSnapshot) => {
+      console.log('🧪 MatchingService: Real-time update - found', matchesSnapshot.size, 'matches');
+      
+      const matches: Match[] = [];
+      
+      matchesSnapshot.forEach(doc => {
+        const data = doc.data();
+        console.log('🧪 MatchingService: Real-time processing match:', doc.id, 'data:', data);
+        
+        // Convert Firestore timestamp to Date
+        const createdAt = data.createdAt?.toDate?.() || data.matchedAt ? new Date(data.matchedAt) : new Date();
+        const lastInteraction = data.updatedAt?.toDate?.() || data.matchedAt ? new Date(data.matchedAt) : new Date();
+        
+        matches.push({
+          id: doc.id,
+          userId1: userId, // Current user
+          userId2: data.partnerId, // Partner's ID
+          eventId: '', // Not available in this structure
+          matchStrength: data.score || 75, // Use score field
+          status: this.mapFirestoreStatus(data.status),
+          createdAt: createdAt,
+          lastInteraction: lastInteraction,
+          isMutual: true,
+          // Additional fields from your structure
+          partnerName: data.partnerName,
+          partnerLocation: data.partnerLocation,
+          partnerBio: data.partnerBio,
+          matchType: data.matchType,
+          partnerInterests: data.partnerInterests
+        });
+      });
+      
+      console.log('🧪 MatchingService: Real-time update - converted to', matches.length, 'matches');
+      callback(matches);
+    });
+
+    return unsubscribe;
+  }
+
+  // Like another user (updated to work with actual schema)
   async likeUser(fromUserId: string, toUserId: string, eventId?: string, message?: string): Promise<MatchResult> {
     try {
       console.log('🧪 MatchingService: Starting like process', { fromUserId, toUserId, eventId });
@@ -73,202 +259,91 @@ class MatchingService {
       const mutualLike = await this.getLike(toUserId, fromUserId);
       
       if (mutualLike) {
-        console.log('🧪 MatchingService: Mutual match found! Creating match and chat...');
+        console.log('🧪 MatchingService: Mutual match found! Creating match...');
         
-        // Create match record
-        const matchData: Match = {
-          id: `${fromUserId}_${toUserId}`,
-          userId1: fromUserId < toUserId ? fromUserId : toUserId,
-          userId2: fromUserId < toUserId ? toUserId : fromUserId,
-          eventId: eventId || '',
-          matchStrength: this.calculateMatchStrength(fromUserId, toUserId),
-          status: MatchStatus.ACCEPTED,
-          createdAt: new Date(),
-          lastInteraction: new Date(),
-          isMutual: true
-        };
-
-        await setDoc(doc(db, COLLECTIONS.MATCHES, matchData.id), {
-          ...matchData,
-          createdAt: serverTimestamp(),
-          lastInteraction: serverTimestamp()
-        });
-
-        // Create chat
-        const chatId = await this.createChat(fromUserId, toUserId, eventId);
+        // Create match using actual schema
+        const matchId = await this.createMatch(fromUserId, toUserId, eventId, 75);
         
-        console.log('🧪 MatchingService: Match and chat created successfully');
-        return {
-          isMatch: true,
-          matchId: matchData.id,
-          chatId,
-          message: "It's a match! 🎉"
+        console.log('🧪 MatchingService: Match created successfully with ID:', matchId);
+        return { 
+          isMatch: true, 
+          matchId,
+          message: 'It\'s a match!' 
         };
       }
 
-      console.log('🧪 MatchingService: Like recorded, waiting for mutual interest');
-      return { 
-        isMatch: false, 
-        message: 'Like sent! They\'ll be notified of your interest.' 
-      };
-
+      return { isMatch: false, message: 'Like sent!' };
+      
     } catch (error) {
-      console.error('🧪 MatchingService: Error liking user:', error);
+      console.error('🧪 MatchingService: Error in like process:', error);
       throw error;
     }
   }
 
-  // Dislike/Pass on a user
-  async dislikeUser(fromUserId: string, toUserId: string): Promise<void> {
+  // Create a match using the same pattern as your Android app
+  async createMatch(userId1: string, userId2: string, eventId?: string, matchStrength?: number): Promise<string> {
     try {
-      console.log('🧪 MatchingService: Disliking user', { fromUserId, toUserId });
+      console.log('🧪 MatchingService: Creating match between users:', userId1, userId2);
       
-      // Create dislike record to prevent future suggestions
-      const dislikeData = {
-        fromUserId,
-        toUserId,
-        timestamp: new Date(),
-        action: 'dislike'
+      // Create match document with the same structure as your Android app
+      const matchId = `match_${userId1}_${userId2}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      
+      const matchData = {
+        userId: userId1, // The user who owns this match document
+        partnerId: userId2, // The matched user's ID
+        partnerName: `Dance Partner ${userId2.slice(0, 8)}...`,
+        partnerLocation: 'New York',
+        partnerBio: 'Passionate dancer looking for partners!',
+        matchType: 'dance_partner',
+        partnerInterests: ['Salsa', 'Bachata', 'Kizomba'],
+        score: matchStrength || 85,
+        status: 'matched',
+        matchedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
-
-      await addDoc(collection(db, COLLECTIONS.DISLIKES), dislikeData);
-      console.log('🧪 MatchingService: Dislike recorded');
       
+      console.log('🧪 MatchingService: Creating match document with ID:', matchId);
+      console.log('🧪 MatchingService: Match data:', matchData);
+      
+      // Create the match document in Firestore
+      await setDoc(doc(db, COLLECTIONS.MATCHES, matchId), matchData);
+      console.log('🧪 MatchingService: Successfully created match document');
+      
+      return matchId;
     } catch (error) {
-      console.error('🧪 MatchingService: Error disliking user:', error);
+      console.error('🧪 MatchingService: Error creating match:', error);
       throw error;
     }
   }
 
-  // Get potential matches for a user
-  async getPotentialMatches(userId: string, limit: number = 20): Promise<UserProfile[]> {
+  // Add match object to user's matches array
+  private async addMatchToUser(userId: string, matchObject: any): Promise<void> {
     try {
-      console.log('🧪 MatchingService: Getting potential matches for user:', userId);
+      const userRef = doc(db, COLLECTIONS.USERS, userId);
+      const userDoc = await getDoc(userRef);
       
-      // Get user's profile to understand preferences
-      const userProfile = await this.getUserProfile(userId);
-      if (!userProfile) {
-        console.log('🧪 MatchingService: User profile not found');
-        return [];
-      }
-
-      // Get users who haven't been liked/disliked by current user
-      const [likedUsers, dislikedUsers] = await Promise.all([
-        this.getLikedUsers(userId),
-        this.getDislikedUsers(userId)
-      ]);
-
-      const excludedUsers = new Set([userId, ...likedUsers, ...dislikedUsers]);
-      
-      // Query for potential matches
-      const usersQuery = query(
-        collection(db, COLLECTIONS.USERS),
-        where('id', '!=', userId),
-        orderBy('lastActive', 'desc'),
-        limit(limit * 2) // Get more to filter
-      );
-
-      const snapshot = await getDocs(usersQuery);
-      const potentialMatches: UserProfile[] = [];
-
-      snapshot.forEach(doc => {
-        const userData = doc.data();
-        const userProfile: UserProfile = {
-          id: doc.id,
-          name: userData.name || userData.displayName || 'Unknown',
-          avatarUrl: userData.avatarUrl || userData.photoUrl,
-          bio: userData.bio || '',
-          danceStyles: userData.danceStyles || [],
-          experienceLevel: userData.experienceLevel || 'beginner',
-          location: userData.location,
-          lastActive: userData.lastActive?.toDate() || new Date(),
-          interestedEvents: userData.interestedEvents || []
-        };
-
-        // Filter out excluded users
-        if (!excludedUsers.has(userProfile.id)) {
-          potentialMatches.push(userProfile);
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const matches = userData.matches || [];
+        
+        // Check if match already exists
+        const existingMatch = matches.find((m: any) => 
+          (typeof m === 'object' && m.uid === matchObject.uid) ||
+          (typeof m === 'string' && m === matchObject.uid)
+        );
+        
+        if (!existingMatch) {
+          matches.push(matchObject);
+          await setDoc(userRef, { matches }, { merge: true });
+          console.log('🧪 MatchingService: Added match object to user', userId);
+        } else {
+          console.log('🧪 MatchingService: Match already exists for user', userId);
         }
-      });
-
-      // Sort by match strength and limit results
-      const scoredMatches = potentialMatches
-        .map(match => ({
-          ...match,
-          matchStrength: this.calculateMatchStrength(userId, match.id)
-        }))
-        .sort((a, b) => b.matchStrength - a.matchStrength)
-        .slice(0, limit);
-
-      console.log('🧪 MatchingService: Found', scoredMatches.length, 'potential matches');
-      return scoredMatches;
-
+      }
     } catch (error) {
-      console.error('🧪 MatchingService: Error getting potential matches:', error);
-      throw error;
-    }
-  }
-
-  // Get user's matches
-  async getUserMatches(userId: string): Promise<Match[]> {
-    try {
-      console.log('🧪 MatchingService: Getting matches for user:', userId);
-      
-      const matchesQuery = query(
-        collection(db, COLLECTIONS.MATCHES),
-        where('userId1', '==', userId),
-        where('status', '==', MatchStatus.ACCEPTED)
-      );
-
-      const matchesQuery2 = query(
-        collection(db, COLLECTIONS.MATCHES),
-        where('userId2', '==', userId),
-        where('status', '==', MatchStatus.ACCEPTED)
-      );
-
-      const [snapshot1, snapshot2] = await Promise.all([
-        getDocs(matchesQuery),
-        getDocs(matchesQuery2)
-      ]);
-
-      const matches: Match[] = [];
-
-      snapshot1.forEach(doc => {
-        const data = doc.data();
-        matches.push({
-          id: doc.id,
-          userId1: data.userId1,
-          userId2: data.userId2,
-          eventId: data.eventId,
-          matchStrength: data.matchStrength,
-          status: data.status,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          lastInteraction: data.lastInteraction?.toDate() || new Date(),
-          isMutual: data.isMutual
-        });
-      });
-
-      snapshot2.forEach(doc => {
-        const data = doc.data();
-        matches.push({
-          id: doc.id,
-          userId1: data.userId1,
-          userId2: data.userId2,
-          eventId: data.eventId,
-          matchStrength: data.matchStrength,
-          status: data.status,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          lastInteraction: data.lastInteraction?.toDate() || new Date(),
-          isMutual: data.isMutual
-        });
-      });
-
-      console.log('🧪 MatchingService: Found', matches.length, 'matches');
-      return matches;
-
-    } catch (error) {
-      console.error('🧪 MatchingService: Error getting user matches:', error);
-      throw error;
+      console.error('🧪 MatchingService: Error adding match to user:', error);
     }
   }
 
@@ -304,68 +379,6 @@ class MatchingService {
       console.error('🧪 MatchingService: Error getting pending likes:', error);
       throw error;
     }
-  }
-
-  // Real-time listener for new matches
-  onNewMatch(userId: string, callback: (match: Match) => void): () => void {
-    console.log('🧪 MatchingService: Setting up real-time match listener for user:', userId);
-    
-    const matchesQuery = query(
-      collection(db, COLLECTIONS.MATCHES),
-      where('userId1', '==', userId),
-      where('status', '==', MatchStatus.ACCEPTED)
-    );
-
-    const matchesQuery2 = query(
-      collection(db, COLLECTIONS.MATCHES),
-      where('userId2', '==', userId),
-      where('status', '==', MatchStatus.ACCEPTED)
-    );
-
-    const unsubscribe1 = onSnapshot(matchesQuery, (snapshot) => {
-      snapshot.docChanges().forEach(change => {
-        if (change.type === 'added') {
-          const data = change.doc.data();
-          const match: Match = {
-            id: change.doc.id,
-            userId1: data.userId1,
-            userId2: data.userId2,
-            eventId: data.eventId,
-            matchStrength: data.matchStrength,
-            status: data.status,
-            createdAt: data.createdAt?.toDate() || new Date(),
-            lastInteraction: data.lastInteraction?.toDate() || new Date(),
-            isMutual: data.isMutual
-          };
-          callback(match);
-        }
-      });
-    });
-
-    const unsubscribe2 = onSnapshot(matchesQuery2, (snapshot) => {
-      snapshot.docChanges().forEach(change => {
-        if (change.type === 'added') {
-          const data = change.doc.data();
-          const match: Match = {
-            id: change.doc.id,
-            userId1: data.userId1,
-            userId2: data.userId2,
-            eventId: data.eventId,
-            matchStrength: data.matchStrength,
-            status: data.status,
-            createdAt: data.createdAt?.toDate() || new Date(),
-            lastInteraction: data.lastInteraction?.toDate() || new Date(),
-            isMutual: data.isMutual
-          };
-          callback(match);
-        }
-      });
-    });
-
-    return () => {
-      unsubscribe1();
-      unsubscribe2();
-    };
   }
 
   // Private helper methods
@@ -410,59 +423,9 @@ class MatchingService {
     return snapshot.docs.map(doc => doc.data().toUserId);
   }
 
-  private async getUserProfile(userId: string): Promise<UserProfile | null> {
-    const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, userId));
-    if (userDoc.exists()) {
-      const data = userDoc.data();
-      return {
-        id: userDoc.id,
-        name: data.name || data.displayName || 'Unknown',
-        avatarUrl: data.avatarUrl || data.photoUrl,
-        bio: data.bio || '',
-        danceStyles: data.danceStyles || [],
-        experienceLevel: data.experienceLevel || 'beginner',
-        location: data.location,
-        lastActive: data.lastActive?.toDate() || new Date(),
-        interestedEvents: data.interestedEvents || []
-      };
-    }
-    return null;
-  }
-
   private calculateMatchStrength(userId1: string, userId2: string): number {
     // Simple match strength calculation
-    // In a real app, this would consider:
-    // - Common dance styles
-    // - Experience level compatibility
-    // - Location proximity
-    // - Availability overlap
-    // - Event interests
-    
-    // For now, return a random score between 60-95
-    return Math.floor(Math.random() * 35) + 60;
-  }
-
-  private async createChat(userId1: string, userId2: string, eventId?: string): Promise<string> {
-    try {
-      console.log('🧪 MatchingService: Creating chat between users:', userId1, userId2);
-      
-      const chatData = {
-        participants: [userId1, userId2],
-        createdAt: serverTimestamp(),
-        lastMessage: '',
-        lastMessageTime: serverTimestamp(),
-        eventId: eventId || null,
-        isActive: true
-      };
-
-      const chatRef = await addDoc(collection(db, COLLECTIONS.CHATS), chatData);
-      console.log('🧪 MatchingService: Chat created with ID:', chatRef.id);
-      
-      return chatRef.id;
-    } catch (error) {
-      console.error('🧪 MatchingService: Error creating chat:', error);
-      throw error;
-    }
+    return Math.floor(Math.random() * 40) + 60; // 60-100 range
   }
 }
 

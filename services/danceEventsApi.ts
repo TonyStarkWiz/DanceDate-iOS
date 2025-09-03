@@ -496,12 +496,12 @@ class DanceEventsApiService {
         
         // Combine events, prioritizing API events
         const combinedEvents = [...apiEvents, ...events];
-        
-        // Remove duplicates based on title and location
+
+      // Remove duplicates based on title and location
         const uniqueEvents = this.removeDuplicates(combinedEvents);
         
         console.log('🧪 DanceEventsApiService: Combined events count:', uniqueEvents.length);
-        return uniqueEvents;
+      return uniqueEvents;
       }
       
       return events;

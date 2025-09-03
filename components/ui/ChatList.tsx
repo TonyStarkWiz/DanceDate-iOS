@@ -1,19 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  FlatList,
-  StyleSheet,
-  SafeAreaView,
-  ActivityIndicator,
-  RefreshControl,
-  Dimensions
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/contexts/AuthContext';
-import { chatService, Chat } from '@/services/chatService';
 import { Toast } from '@/components/ui/Toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { Chat, chatService } from '@/services/chatService';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Dimensions,
+    FlatList,
+    RefreshControl,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -35,7 +35,7 @@ export const ChatList: React.FC<ChatListProps> = ({ onChatSelect, onBack }) => {
   useEffect(() => {
     if (!user?.id) return;
 
-    const unsubscribe = chatService.onUserChats(user.id, (newChats) => {
+    const unsubscribe = chatService.listenToUserChats((newChats) => {
       setChats(newChats);
       setIsLoading(false);
     });
@@ -49,7 +49,7 @@ export const ChatList: React.FC<ChatListProps> = ({ onChatSelect, onBack }) => {
     
     setRefreshing(true);
     try {
-      const refreshedChats = await chatService.getUserChats(user.id);
+      const refreshedChats = await chatService.getUserChats();
       setChats(refreshedChats);
     } catch (error) {
       console.error('Error refreshing chats:', error);

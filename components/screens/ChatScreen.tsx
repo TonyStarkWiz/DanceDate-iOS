@@ -1,20 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  StyleSheet,
-  SafeAreaView,
-  ActivityIndicator,
-  Text,
-  TouchableOpacity
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/contexts/AuthContext';
 import { ChatList } from '@/components/ui/ChatList';
 import { ChatRoom } from '@/components/ui/ChatRoom';
-import { chatService } from '@/services/chatService';
 import { Toast } from '@/components/ui/Toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { chatService } from '@/services/chatService';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    View
+} from 'react-native';
 
-export const ChatScreen: React.FC = () => {
+interface ChatScreenProps {
+  partnerId?: string;
+}
+
+export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerId }) => {
   const { user } = useAuth();
   const [currentView, setCurrentView] = useState<'list' | 'room'>('list');
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
@@ -45,13 +48,24 @@ export const ChatScreen: React.FC = () => {
       try {
         setIsLoading(true);
         
-        // Get user's unread message count
-        const unreadCount = await chatService.getUnreadCount(user.id);
-        
-        if (unreadCount > 0) {
-          setToastMessage(`You have ${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`);
-          setToastType('info');
-          setShowToast(true);
+        // If partnerId is provided, create or get chat with that partner
+        if (partnerId) {
+          console.log('🧪 ChatScreen: Creating/getting chat with partner:', partnerId);
+          
+          const result = await chatService.createOrGetChat([user.id, partnerId]);
+          if (result.success && result.data) {
+            setSelectedChatId(result.data);
+            setCurrentView('room');
+            console.log('🧪 ChatScreen: Opened chat:', result.data);
+          } else {
+            console.error('🧪 ChatScreen: Failed to create/get chat:', result.error);
+            setToastMessage('Failed to open chat');
+            setToastType('error');
+            setShowToast(true);
+          }
+        } else {
+          // No partnerId provided, just show the chat list
+          console.log('🧪 ChatScreen: No partnerId provided, showing chat list');
         }
         
       } catch (error) {
@@ -62,7 +76,7 @@ export const ChatScreen: React.FC = () => {
     };
 
     checkForNewMatches();
-  }, [user?.id]);
+  }, [user?.id, partnerId]);
 
   if (!user) {
     return (

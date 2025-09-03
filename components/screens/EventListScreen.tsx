@@ -254,7 +254,7 @@ export const EventListScreen: React.FC = () => {
     setRefreshing(true);
     await loadEvents(useLocation);
     await loadUserInterests();
-    setRefreshing(false);
+      setRefreshing(false);
   };
 
   const handleUseLocation = async () => {
@@ -648,7 +648,7 @@ export const EventListScreen: React.FC = () => {
       {showPostalCodeInput && (
         <View style={styles.postalCodeContainer}>
           <View style={styles.postalCodeRow}>
-            <TextInput
+          <TextInput
               style={[styles.postalCodeInput, postalCodeValid && styles.postalCodeInputValid]}
               placeholder="Enter postal code"
               value={postalCode}
@@ -663,28 +663,28 @@ export const EventListScreen: React.FC = () => {
                 US
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity
+              <TouchableOpacity
               style={[styles.countryButton, selectedCountry === 'UK' && styles.countryButtonActive]}
               onPress={() => setSelectedCountry('UK')}
-            >
+              >
               <Text style={[styles.countryButtonText, selectedCountry === 'UK' && styles.countryButtonTextActive]}>
                 UK
               </Text>
-            </TouchableOpacity>
-          </View>
+              </TouchableOpacity>
+              </View>
           {postalCode && (
             <Text style={[styles.validationText, postalCodeValid ? styles.validationTextValid : styles.validationTextInvalid]}>
               {PostalCodeValidator.validatePostalCode(postalCode, selectedCountry).message}
             </Text>
           )}
-          <TouchableOpacity
+              <TouchableOpacity
             style={[styles.searchButton, !postalCodeValid && styles.searchButtonDisabled]}
             onPress={handlePostalCodeSearch}
             disabled={!postalCodeValid}
-          >
+              >
             <Ionicons name="search" size={20} color="#fff" />
             <Text style={styles.searchButtonText}>Search by Code</Text>
-          </TouchableOpacity>
+              </TouchableOpacity>
         </View>
       )}
 
