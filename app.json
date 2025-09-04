@@ -2,7 +2,7 @@
   "expo": {
     "name": "DanceDate",
     "slug": "dancedate-ios",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "dancedateios",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.antho.dancedate",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "We use the camera so you can take photos for your dance profile and share dance moments.",
@@ -157,7 +157,7 @@
         "projectId": "fc1e1cb9-f859-4555-b7aa-a862feb816e6"
       }
     },
-    "owner": "antho",
+    "owner": "warmbeach52757",
     "privacy": "public",
     "description": "Find your perfect dance partner! Connect with dancers in your area, discover dance events, and start your dance journey today.",
     "keywords": [
