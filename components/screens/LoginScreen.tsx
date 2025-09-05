@@ -208,7 +208,7 @@ const LoginScreen: React.FC = () => {
       'Guest mode has limited functionality. You can browse events but cannot book or interact with other users.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Continue as Guest', onPress: () => router.push('/feed') }
+        { text: 'Continue as Guest', onPress: () => router.push('/(tabs)') }
       ]
     );
   };

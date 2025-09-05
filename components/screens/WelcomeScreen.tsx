@@ -147,7 +147,7 @@ const WelcomeScreen: React.FC = () => {
 
            <TouchableOpacity 
              style={styles.secondaryButton}
-             onPress={() => router.push('/premium')}
+             onPress={() => router.push('/(tabs)/premium')}
            >
              <Text style={styles.secondaryButtonText}>View Premium Plans</Text>
            </TouchableOpacity>

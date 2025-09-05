@@ -4,4 +4,3 @@ import React from 'react';
 export default function BallRoute() {
   return <BallScreen />;
 }
-

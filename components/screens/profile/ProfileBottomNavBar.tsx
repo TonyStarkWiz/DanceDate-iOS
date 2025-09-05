@@ -14,7 +14,7 @@ export const ProfileBottomNavBar: React.FC = () => {
   };
 
   const handleEventsPress = () => {
-    router.push('/eventList');
+    router.push('/(tabs)/eventList');
   };
 
   const handlePartnersPress = () => {
@@ -22,7 +22,7 @@ export const ProfileBottomNavBar: React.FC = () => {
   };
 
   const handleFeedPress = () => {
-    router.push('/feed');
+    router.push('/(tabs)');
   };
 
   const handleProfilePress = () => {

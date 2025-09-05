@@ -279,7 +279,7 @@ export default function EventListScreen() {
 
           <TouchableOpacity 
             style={styles.nextActionCard}
-            onPress={() => router.push('/matches')}
+            onPress={() => router.push('/(tabs)/matches')}
           >
             <View style={styles.nextActionIcon}>
               <Text style={styles.nextActionIconText}>💜</Text>

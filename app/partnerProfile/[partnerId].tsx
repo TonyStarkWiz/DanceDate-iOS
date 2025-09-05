@@ -42,7 +42,7 @@ export default function PartnerProfileRoute() {
   };
 
   const handleViewEvents = () => {
-    router.push('/eventList');
+    router.push('/(tabs)/eventList');
   };
 
   return (

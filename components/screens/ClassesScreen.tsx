@@ -1,4 +1,3 @@
-import { BottomNavBar } from '@/components/ui/BottomNavBar';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -187,7 +186,7 @@ export const ClassesScreen: React.FC = () => {
   };
 
   const handleUpgradeToPremium = () => {
-    router.push('/paywall');
+    router.push('/(tabs)/premium');
   };
 
   const handleBookNow = (event: any) => {
@@ -500,9 +499,6 @@ export const ClassesScreen: React.FC = () => {
         <View style={styles.bottomSpacing} />
       </ScrollView>
       
-      {/* Bottom Navigation Bar */}
-      <BottomNavBar />
-
       {/* Floating Action Button */}
       <TouchableOpacity style={styles.fab} onPress={handleVideoLibrary}>
         <Ionicons name="play" size={24} color="#000" />

@@ -1,4 +1,3 @@
-import { BackButton } from '@/components/ui/BackButton';
 import { EventMatchModal } from '@/components/ui/EventMatchModal';
 import { NextStepsGuide } from '@/components/ui/NextStepsGuide';
 import { PremiumUpgradePopup } from '@/components/ui/PremiumUpgradePopup';
@@ -155,7 +154,7 @@ export const EventListScreen: React.FC = () => {
             'You have reached your daily search limit. Upgrade to premium for unlimited searches.',
             [
               { text: 'Cancel', style: 'cancel' },
-              { text: 'Upgrade', onPress: () => router.push('/premiumUpgrade') }
+              { text: 'Upgrade', onPress: () => router.push('/(tabs)/premium') }
             ]
           );
           return;
@@ -517,7 +516,6 @@ export const EventListScreen: React.FC = () => {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <BackButton />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6A11CB" />
           <Text style={styles.loadingText}>Finding dance events with AI...</Text>
@@ -528,8 +526,6 @@ export const EventListScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <BackButton />
-      
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Dance Events</Text>
@@ -538,24 +534,6 @@ export const EventListScreen: React.FC = () => {
           {useLocation && userLocation ? ' near you' : ''}
         </Text>
         
-        {/* Premium Status */}
-        {!premiumLoading && (
-          <View style={styles.premiumStatus}>
-            <Ionicons 
-              name={isPremium ? "diamond" : "diamond-outline"} 
-              size={16} 
-              color={isPremium ? "#FFD700" : "#999"} 
-            />
-            <Text style={[styles.premiumText, isPremium && styles.premiumTextActive]}>
-              {isPremium ? 'Premium Search' : 'Free Search'}
-            </Text>
-            {isPremium && (
-              <Text style={styles.premiumSubtext}>
-                Powered by Google Custom Search
-              </Text>
-            )}
-          </View>
-        )}
 
         {/* Usage Stats */}
         {user?.id && (
@@ -613,25 +591,19 @@ export const EventListScreen: React.FC = () => {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.actionButton, styles.actionButtonPremium]}
+          style={[styles.actionButton, isPremium && styles.premiumButtonActive]}
           onPress={() => {
-            setPremiumTriggerType('promotional');
-            setPremiumCountdown(300);
-            setShowPremiumPopup(true);
-            if (user?.id) {
-              premiumUpgradeManager.recordPopupShown(user.id, 'promotional');
+            if (isPremium) {
+              router.push('/(tabs)/premium');
+            } else {
+              setPremiumTriggerType('promotional');
+              setPremiumCountdown(300);
+              setShowPremiumPopup(true);
+              if (user?.id) {
+                premiumUpgradeManager.recordPopupShown(user.id, 'promotional');
+              }
             }
           }}
-        >
-          <Ionicons name="diamond" size={20} color="#FFD700" />
-          <Text style={[styles.actionButtonText, styles.actionButtonTextPremium]}>
-            Upgrade
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionButton, isPremium && styles.premiumButtonActive]}
-          onPress={() => router.push('/premiumUpgrade')}
         >
           <Ionicons 
             name={isPremium ? "diamond" : "diamond-outline"} 
@@ -755,36 +727,45 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#4A148C',
+    width: '100%', // Ensure full width
   },
   header: {
     alignItems: 'center',
     paddingVertical: 20,
+    paddingHorizontal: 16,
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 5,
+    textAlign: 'center',
+    paddingHorizontal: 16,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    paddingHorizontal: 16,
   },
   actionButtons: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingBottom: 20,
+    flexWrap: 'wrap',
+    gap: 10,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 25,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
+    minWidth: 120, // Ensure minimum width for touch targets
   },
   actionButtonActive: {
     backgroundColor: '#6A11CB',
@@ -859,27 +840,30 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   listContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingBottom: 20,
   },
   eventItem: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 15,
-    padding: 20,
+    padding: 16,
     marginBottom: 15,
+    marginHorizontal: 4, // Add small horizontal margin to prevent edge cutoff
   },
   eventHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 8,
+    flexWrap: 'wrap',
   },
   eventTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
     flex: 1,
-    marginRight: 10,
+    marginRight: 8,
+    minWidth: 0, // Allows text to wrap properly
   },
   sourceBadge: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -932,6 +916,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: 8,
   },
   eventDate: {
     fontSize: 12,
@@ -940,7 +926,8 @@ const styles = StyleSheet.create({
   eventActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    flexWrap: 'wrap',
   },
   interestButton: {
     flexDirection: 'row',
@@ -1093,12 +1080,5 @@ const styles = StyleSheet.create({
   },
   actionButtonTextUrgent: {
     color: '#fff',
-  },
-  actionButtonPremium: {
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-    borderColor: '#FFD700',
-  },
-  actionButtonTextPremium: {
-    color: '#FFD700',
   },
 });

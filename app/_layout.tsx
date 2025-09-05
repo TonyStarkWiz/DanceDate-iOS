@@ -49,6 +49,9 @@ function RootLayoutContent() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
+      {/* Main App Tabs */}
+      <Stack.Screen name="(tabs)" />
+      
       {/* Post-Login Welcome Screen */}
       <Stack.Screen name="postLoginWelcome" />
       
@@ -91,6 +94,7 @@ function RootLayoutContent() {
       <Stack.Screen name="video_debug" />
       
       {/* Premium Features */}
+      <Stack.Screen name="premium" />
       <Stack.Screen name="paywall" />
       <Stack.Screen name="payment" />
     </Stack>

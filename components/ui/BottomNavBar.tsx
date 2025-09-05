@@ -2,12 +2,12 @@
 // Prevents dead ends and provides context-aware navigation
 
 import { useAuth } from '@/contexts/AuthContext';
+import { chatService } from '@/services/chatService';
 import { Ionicons } from '@expo/vector-icons';
 import { usePathname } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { navigationManager } from './NavigationManager';
-import { chatService } from '@/services/chatService';
 
 interface NavItem {
   id: string;
@@ -22,12 +22,19 @@ interface NavItem {
 export const BottomNavBar: React.FC = () => {
   const { user } = useAuth();
   const pathname = usePathname();
-  const [activeTab, setActiveTab] = useState('eventList');
+  const [activeTab, setActiveTab] = useState('feed');
   const [isPremium, setIsPremium] = useState(false);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
 
   // Navigation items with context awareness
   const navItems: NavItem[] = [
+    {
+      id: 'feed',
+      title: 'Feed',
+      icon: 'home',
+      route: '/feed',
+      badge: 0
+    },
     {
       id: 'eventList',
       title: 'Events',
@@ -36,11 +43,17 @@ export const BottomNavBar: React.FC = () => {
       badge: 0
     },
     {
-      id: 'matching',
-      title: 'Partners',
-      icon: 'people',
-      route: '/matching',
-      requiresAuth: true,
+      id: 'ball',
+      title: 'Ball',
+      icon: 'trophy',
+      route: '/ball',
+      badge: 0
+    },
+    {
+      id: 'classes',
+      title: 'Classes',
+      icon: 'school',
+      route: '/classes',
       badge: 0
     },
     {
@@ -50,27 +63,12 @@ export const BottomNavBar: React.FC = () => {
       route: '/matches',
       requiresAuth: true,
       badge: 0
-    },
-    {
-      id: 'chat',
-      title: 'Chat',
-      icon: 'chatbubbles',
-      route: '/chat',
-      requiresAuth: true,
-      badge: unreadMessageCount
-    },
-    {
-      id: 'profile',
-      title: 'Profile',
-      icon: 'person',
-      route: '/profile',
-      requiresAuth: true
     }
   ];
 
   useEffect(() => {
     // Update active tab based on current route
-    const currentTab = navItems.find(item => pathname.includes(item.id))?.id || 'eventList';
+    const currentTab = navItems.find(item => pathname.includes(item.id))?.id || 'feed';
     setActiveTab(currentTab);
     
     // Check premium status
@@ -187,7 +185,7 @@ export const BottomNavBar: React.FC = () => {
       'Navigation Issue',
       'Let\'s get you back on track:',
       [
-        { text: 'Find Events', onPress: () => navigationManager.navigateTo('eventList') },
+        { text: 'Go to Feed', onPress: () => navigationManager.navigateTo('feed') },
         { text: 'Sign In', onPress: () => navigationManager.navigateTo('signin') },
         { text: 'Cancel', style: 'cancel' }
       ]

@@ -20,7 +20,7 @@ export const FeedBottomNavBar: React.FC<FeedBottomNavBarProps> = ({
 
     switch (index) {
       case 0: // Events
-        router.push('/eventList');
+        router.push('/(tabs)/eventList');
         break;
       case 1: // Search
         Alert.alert('Under Construction', 'Search is under construction');

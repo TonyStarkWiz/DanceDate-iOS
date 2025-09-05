@@ -176,7 +176,7 @@ export const EventBasedMatchingScreen: React.FC = () => {
       <Text style={styles.emptySubtitle}>
         Start showing interest in dance events to find potential partners with similar interests!
       </Text>
-      <TouchableOpacity style={styles.browseButton} onPress={() => router.push('/eventList')}>
+      <TouchableOpacity style={styles.browseButton} onPress={() => router.push('/(tabs)/eventList')}>
         <Ionicons name="calendar-outline" size={20} color="#fff" />
         <Text style={styles.browseButtonText}>Browse Events</Text>
       </TouchableOpacity>

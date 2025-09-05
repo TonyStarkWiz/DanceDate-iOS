@@ -10,7 +10,7 @@ export const PostLoginWelcomeScreen: React.FC = () => {
   }, []);
   const handleSeeEvents = () => {
     console.log('🧪 Navigating to event list screen');
-    router.push('/eventList');
+    router.push('/(tabs)/eventList');
   };
 
   const handleMeetPartners = () => {
@@ -20,7 +20,7 @@ export const PostLoginWelcomeScreen: React.FC = () => {
 
   const handleViewPosts = () => {
     console.log('🧪 Navigating to feed screen');
-    router.push('/feed');
+    router.push('/(tabs)');
   };
 
   const handleEditProfile = () => {

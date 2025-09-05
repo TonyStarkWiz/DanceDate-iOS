@@ -1,4 +1,3 @@
-import { BottomNavBar } from '@/components/ui/BottomNavBar';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -138,7 +137,7 @@ export const BallScreen: React.FC = () => {
   };
 
   const handleUpgradeToPremium = () => {
-    router.push('/paywall');
+    router.push('/(tabs)/premium');
   };
 
   const handleUpgradeSpecialized = (tier: string) => {
@@ -325,9 +324,6 @@ export const BallScreen: React.FC = () => {
         <View style={styles.bottomSpacing} />
       </ScrollView>
       
-      {/* Bottom Navigation Bar */}
-      <BottomNavBar />
-
       {/* Specialized Search Paywall Modal */}
       {showSpecializedPaywall && (
         <View style={styles.modalOverlay}>
@@ -728,6 +724,3 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
-
-import { BackButton } from '../ui/BackButton';
-      <BackButton />

@@ -305,7 +305,7 @@ export const AllMatchesScreen: React.FC = () => {
             </Text>
             <TouchableOpacity
               style={styles.exploreButton}
-              onPress={() => router.push('/eventList')}
+              onPress={() => router.push('/(tabs)/eventList')}
             >
               <Text style={styles.exploreButtonText}>Explore Events</Text>
             </TouchableOpacity>

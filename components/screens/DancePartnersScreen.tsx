@@ -112,7 +112,7 @@ export const DancePartnersScreen: React.FC = () => {
   };
 
   const handleBrowseEvents = () => {
-    router.push('/eventList');
+    router.push('/(tabs)/eventList');
   };
 
   const formatMatchTime = (timestamp: number) => {

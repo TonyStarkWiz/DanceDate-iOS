@@ -8,7 +8,6 @@ import {
     View,
 } from 'react-native';
 import { DancePostCard } from './feed/DancePostCard';
-import { FeedBottomNavBar } from './feed/FeedBottomNavBar';
 import { FeedTopBar } from './feed/FeedTopBar';
 
 // Mock data for dance posts - replace with real API calls later
@@ -137,9 +136,6 @@ const FeedScreen: React.FC = () => {
         {/* Bottom Spacing for Navigation */}
         <View style={{ height: 100 }} />
       </ScrollView>
-
-      {/* Bottom Navigation Bar */}
-      <FeedBottomNavBar />
     </SafeAreaView>
   );
 };
@@ -190,6 +186,3 @@ const styles = StyleSheet.create({
 });
 
 export default FeedScreen;
-
-import { BackButton } from '../ui/BackButton';
-      <BackButton />

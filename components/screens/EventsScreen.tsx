@@ -213,7 +213,7 @@ export default function EventsScreen() {
             setCurrentMatch(null);
           }}
           onStartChat={() => {
-            router.push('/matches');
+            router.push('/(tabs)/matches');
           }}
         />
       )}

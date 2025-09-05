@@ -197,7 +197,7 @@ export const SimpleRealMatchesScreen: React.FC = () => {
       <Text style={styles.emptyStateText}>
         {debugInfo || 'Start showing interest in events to find dance partners!'}
       </Text>
-      <TouchableOpacity style={styles.browseButton} onPress={() => router.push('/eventList')}>
+      <TouchableOpacity style={styles.browseButton} onPress={() => router.push('/(tabs)/eventList')}>
         <Ionicons name="calendar-outline" size={20} color="#fff" />
         <Text style={styles.browseButtonText}>Browse Events</Text>
       </TouchableOpacity>
