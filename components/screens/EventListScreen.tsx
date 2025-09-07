@@ -323,6 +323,7 @@ export const EventListScreen: React.FC = () => {
       
       // Update UI state - always save the interest regardless of match result
       console.log('🧪 EventListScreen: Updating userInterests state...');
+      console.log('🧪 EventListScreen: Current userInterests before update:', Array.from(userInterests));
       
       // Import toDocId to encode the event ID the same way as Firestore
       const { toDocId } = await import('@/config/firebase');
@@ -331,6 +332,7 @@ export const EventListScreen: React.FC = () => {
       console.log('🧪 EventListScreen: Safe eventId for UI:', safeEventId);
       
       setUserInterests(prev => {
+        console.log('🧪 EventListScreen: setUserInterests callback called with prev:', Array.from(prev));
         const newSet = new Set(prev);
         newSet.add(safeEventId); // Use the same encoded ID as Firestore
         console.log('🧪 EventListScreen: Updated userInterests:', Array.from(newSet));
@@ -347,6 +349,11 @@ export const EventListScreen: React.FC = () => {
         
         return newSet;
       });
+      
+      // Force a re-render by logging the state after the update
+      setTimeout(() => {
+        console.log('🧪 EventListScreen: userInterests after state update:', Array.from(userInterests));
+      }, 100);
       
       // Close bottom sheet
       console.log('🧪 EventListScreen: Closing bottom sheet...');
