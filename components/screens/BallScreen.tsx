@@ -1,9 +1,9 @@
 import { CountryDropdown } from '@/components/ui/CountryDropdown';
+import { IntentSelectionBottomSheet, IntentType } from '@/components/ui/IntentSelectionBottomSheet';
 import { useAuth } from '@/contexts/AuthContext';
-import { eventInterestService } from '@/services/eventInterestService';
 import { FormalBallEvent, FormalBallSearchOptions, formalBallSearchService } from '@/services/formalBallSearchService';
+import { intentBasedMatchingService } from '@/services/intentBasedMatchingService';
 import { LocationData, locationService, PostalCodeValidator } from '@/services/locationService';
-import { matchDetectionService } from '@/services/matchDetectionService';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -11,13 +11,14 @@ import {
     ActivityIndicator,
     Alert,
     FlatList,
+    Pressable,
     SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 
 export const BallScreen: React.FC = () => {
@@ -37,6 +38,10 @@ export const BallScreen: React.FC = () => {
   // Interest tracking
   const [userInterests, setUserInterests] = useState<Set<string>>(new Set());
   const [loadingInterests, setLoadingInterests] = useState<Set<string>>(new Set());
+  
+  // Intent-based matching
+  const [showIntentBottomSheet, setShowIntentBottomSheet] = useState(false);
+  const [selectedEventForIntent, setSelectedEventForIntent] = useState<FormalBallEvent | null>(null);
 
   useEffect(() => {
     // Initialize screen
@@ -60,8 +65,24 @@ export const BallScreen: React.FC = () => {
       }
       
       console.log('🧪 BallScreen: Loading user interests from Firestore...');
-      const interests = await eventInterestService.getUserInterestedEvents(user.id);
-      const interestIds = new Set(interests.map(interest => interest.eventId));
+      
+      // Import Firebase modules
+      const { db } = await import('@/config/firebase');
+      const { collection, query, getDocs } = await import('firebase/firestore');
+      const { toDocId } = await import('@/config/firebase');
+      
+      // Query the users/{userId}/interested_events subcollection
+      const interestsRef = collection(db, 'users', user.id, 'interested_events');
+      const interestsSnapshot = await getDocs(interestsRef);
+      
+      const interestIds = new Set<string>();
+      interestsSnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.eventId) {
+          // Use the raw eventId as stored in Firestore (not decoded)
+          interestIds.add(data.eventId);
+        }
+      });
       
       console.log('🧪 BallScreen: Loaded', interestIds.size, 'user interests from Firestore');
       console.log('🧪 BallScreen: Interest IDs:', Array.from(interestIds));
@@ -86,7 +107,7 @@ export const BallScreen: React.FC = () => {
         try {
           const cachedInterests = localStorage.getItem(`userInterests_${user.id}`);
           if (cachedInterests) {
-            const interestIds = new Set(JSON.parse(cachedInterests));
+            const interestIds = new Set<string>(JSON.parse(cachedInterests));
             setUserInterests(interestIds);
             console.log('🧪 BallScreen: Loaded interests from localStorage fallback');
           }
@@ -254,7 +275,7 @@ export const BallScreen: React.FC = () => {
   };
 
   const handleUpgradeToPremium = () => {
-    router.push('/(tabs)/premium');
+    router.push('/(tabs)/premium' as any);
   };
 
   const handleUpgradeSpecialized = (tier: string) => {
@@ -272,9 +293,32 @@ export const BallScreen: React.FC = () => {
 
       console.log('🧪 BallScreen: User interested in ball event:', event.title);
       
+      // Show intent selection bottom sheet
+      setSelectedEventForIntent(event);
+      setShowIntentBottomSheet(true);
+      
+    } catch (error) {
+      console.error('🧪 BallScreen: Error showing intent selection:', error);
+      Alert.alert('Error', 'Failed to show intent selection. Please try again.');
+    }
+  };
+
+  // Handle intent selection from bottom sheet
+  const handleIntentSelected = async (intent: IntentType) => {
+    try {
+      if (!user || !selectedEventForIntent) {
+        console.error('🧪 BallScreen: No user or selected event for intent');
+        return;
+      }
+
+      console.log('🧪 BallScreen: Intent selected:', intent, 'for event:', selectedEventForIntent.title);
+      
+      // Close bottom sheet
+      setShowIntentBottomSheet(false);
+      
       // IMMEDIATE STATE CHANGE - Update UI instantly for better UX
       setUserInterests(prev => {
-        const newSet = new Set([...prev, event.id]);
+        const newSet = new Set([...prev, selectedEventForIntent.id]);
         console.log('🧪 BallScreen: Immediately updated userInterests set:', Array.from(newSet));
         
         // Also save to localStorage immediately for persistence
@@ -291,68 +335,36 @@ export const BallScreen: React.FC = () => {
       });
       
       // Add to loading state
-      setLoadingInterests(prev => new Set([...prev, event.id]));
+      setLoadingInterests(prev => new Set([...prev, selectedEventForIntent.id]));
       
-      // Save user interest to Firestore (in background)
-      await eventInterestService.saveEventInterest(user.id, {
-        id: event.id,
-        title: event.title,
-        description: event.description,
-        location: event.location,
-        source: event.source,
-        url: event.website,
-        startDate: event.startDate,
-        instructor: 'Ball Event',
-        tags: ['ball', 'formal', ...event.danceStyles]
-      });
+      // Save user intent to Firestore
+      await intentBasedMatchingService.saveUserIntent(user.id, selectedEventForIntent.id, intent);
       
-      // Check for matches after saving interest
-      try {
-        const matchResult = await matchDetectionService.checkForMatchesImmediately(user.id, {
-          id: event.id,
-          title: event.title,
-          description: event.description,
-          location: event.location,
-          source: event.source,
-          url: event.website,
-          startDate: event.startDate,
-          instructor: 'Ball Event',
-          tags: ['ball', 'formal', ...event.danceStyles]
-        });
+      // Check for matches based on intent
+      const matchResult = await intentBasedMatchingService.checkForMatch(user.id, selectedEventForIntent.id, selectedEventForIntent.title, intent);
+      
+      if (matchResult.matched) {
+        console.log('🧪 BallScreen: Found intent-based match!');
         
-        if (matchResult.newMatches.length > 0) {
-          console.log('🧪 BallScreen: Found new matches!', matchResult.newMatches.length);
-          
-          // Show match alert
-          Alert.alert(
-            '🎉 You Have a Match!',
-            `You matched with ${matchResult.newMatches[0].potentialPartner.name} for "${event.title}"! You both are interested in this ball event.`,
-            [
-              {
-                text: 'View Matches',
-                onPress: () => {
-                  router.push('/(tabs)/matches');
-                }
-              },
-              { text: 'OK', style: 'default' }
-            ]
-          );
-        } else {
-          // Show success message if no matches
-          Alert.alert(
-            'Interest Recorded! 🎉',
-            `You've shown interest in "${event.title}". We'll notify you if someone else is interested too!`,
-            [
-              { text: 'OK', style: 'default' }
-            ]
-          );
-        }
-      } catch (matchError) {
-        console.error('🧪 BallScreen: Error checking for matches:', matchError);
-        // Still show success message even if match check fails
+        // Show match alert
+        Alert.alert(
+          '🎉 You Have a Match!',
+          `You matched with someone for "${selectedEventForIntent.title}"! You both have compatible intentions for this ball event.`,
+          [
+            {
+              text: 'View Matches',
+              onPress: () => {
+                router.push('/(tabs)/matches');
+              }
+            },
+            { text: 'OK', style: 'default' }
+          ]
+        );
+      } else {
+        // Show success message if no matches
         Alert.alert(
           'Interest Recorded! 🎉',
-          `You've shown interest in "${event.title}". We'll keep you updated about this ball event!`,
+          `You've shown interest in "${selectedEventForIntent.title}" with ${intent} intent. We'll notify you if someone else is interested too!`,
           [
             { text: 'OK', style: 'default' }
           ]
@@ -360,15 +372,20 @@ export const BallScreen: React.FC = () => {
       }
       
     } catch (error) {
-      console.error('🧪 BallScreen: Error recording interest:', error);
+      console.error('🧪 BallScreen: Error processing intent:', error);
       Alert.alert('Error', 'Failed to record your interest. Please try again.');
     } finally {
       // Remove from loading state
       setLoadingInterests(prev => {
         const newSet = new Set(prev);
-        newSet.delete(event.id);
+        if (selectedEventForIntent) {
+          newSet.delete(selectedEventForIntent.id);
+        }
         return newSet;
       });
+      
+      // Clear selected event
+      setSelectedEventForIntent(null);
     }
   };
 
@@ -553,7 +570,7 @@ export const BallScreen: React.FC = () => {
                     {/* Event Actions */}
                     <View style={styles.eventActions}>
                       {/* I'm Interested Button */}
-                      <TouchableOpacity
+                      <Pressable
                         style={[
                           styles.interestButton,
                           userInterests.has(item.id) && styles.interestButtonActive,
@@ -564,6 +581,8 @@ export const BallScreen: React.FC = () => {
                           handleInterestPress(item);
                         }}
                         disabled={loadingInterests.has(item.id)}
+                        hitSlop={12}
+                        accessibilityRole="button"
                       >
                         {loadingInterests.has(item.id) ? (
                           <ActivityIndicator size="small" color="#fff" />
@@ -577,7 +596,7 @@ export const BallScreen: React.FC = () => {
                         <Text style={styles.interestButtonText}>
                           {loadingInterests.has(item.id) ? 'Saving...' : (userInterests.has(item.id) ? 'Interested' : "I'm Interested")}
                         </Text>
-                      </TouchableOpacity>
+                      </Pressable>
                       
                       {/* Event Type Badge */}
                       <View style={styles.eventTypeBadge}>
@@ -652,6 +671,16 @@ export const BallScreen: React.FC = () => {
           </View>
         </View>
       )}
+      
+      {/* Intent Selection Bottom Sheet */}
+      <IntentSelectionBottomSheet
+        visible={showIntentBottomSheet}
+        onIntentSelected={handleIntentSelected}
+        onDismiss={() => {
+          setShowIntentBottomSheet(false);
+          setSelectedEventForIntent(null);
+        }}
+      />
     </SafeAreaView>
   );
 };

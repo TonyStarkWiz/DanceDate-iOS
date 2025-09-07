@@ -147,10 +147,35 @@ export class GoogleCustomSearchHttpClient {
     // url.searchParams.set('imgType', 'photo');
     
     try {
-      const response = await fetch(url.toString());
+      console.log('🧪 GoogleCustomSearchHttpClient: Performing search for:', query);
+      
+      // Add timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      const response = await fetch(url.toString(), {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       const data = await response.json();
       
+      if (data.error) {
+        console.error('🧪 GoogleCustomSearchHttpClient: API returned error:', data.error);
+        throw new Error(data.error.message || 'API Error');
+      }
+      
       if (data.items) {
+        console.log('🧪 GoogleCustomSearchHttpClient: Found', data.items.length, 'results');
         return data.items.map((item: any) => ({
           title: item.title,
           link: item.link,
@@ -160,10 +185,15 @@ export class GoogleCustomSearchHttpClient {
         }));
       }
       
+      console.log('🧪 GoogleCustomSearchHttpClient: No items found in response');
       return [];
     } catch (error) {
+      if (error.name === 'AbortError') {
+        console.error('🧪 GoogleCustomSearchHttpClient: Request timeout');
+        throw new Error('Request timeout - please try again');
+      }
       console.error('🧪 GoogleCustomSearchHttpClient: API error:', error);
-      return [];
+      throw error;
     }
   }
 
