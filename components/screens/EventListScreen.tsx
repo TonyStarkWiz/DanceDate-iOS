@@ -309,9 +309,19 @@ export const EventListScreen: React.FC = () => {
         intentType
       );
       
-      // Update UI state
-      if (matchResult.matched) {
-        setUserInterests(prev => new Set([...prev, selectedEventForIntent.id]));
+      // Update UI state - always save the interest regardless of match result
+      setUserInterests(prev => new Set([...prev, selectedEventForIntent.id]));
+      
+      // Also save to localStorage for persistence
+      if (typeof window !== 'undefined') {
+        try {
+          const currentInterests = Array.from(userInterests);
+          const updatedInterests = [...currentInterests, selectedEventForIntent.id];
+          localStorage.setItem(`userInterests_${user.id}`, JSON.stringify(updatedInterests));
+          console.log('🧪 EventListScreen: Saved interest to localStorage:', selectedEventForIntent.id);
+        } catch (storageError) {
+          console.warn('🧪 EventListScreen: Error saving to localStorage:', storageError);
+        }
       }
       
       // Close bottom sheet

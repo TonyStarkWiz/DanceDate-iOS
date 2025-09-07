@@ -100,7 +100,7 @@ class IntentBasedMatchingService {
         }
     }
 
-    // Save user intent to Firestore (placeholder)
+    // Save user intent to Firestore
     async saveUserIntent(
         userId: string,
         eventId: string,
@@ -109,14 +109,20 @@ class IntentBasedMatchingService {
         try {
             Alert.alert('🧪 Saving Intent', `Saving intent ${intentType} for event ${eventId}`);
             
-            // In real app, this would save to Firestore:
-            // await setDoc(doc(db, 'users', userId, 'event_intents', eventId), {
-            //     eventId,
-            //     intentType,
-            //     timestamp: serverTimestamp()
-            // });
+            // Import Firebase modules
+            const { db } = await import('@/config/firebase');
+            const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
             
-            console.log('🧪 Intent saved successfully');
+            // Save to Firestore subcollection: users/{userId}/interested_events/{eventId}
+            const eventDocRef = doc(db, 'users', userId, 'interested_events', eventId);
+            await setDoc(eventDocRef, {
+                eventId,
+                intentType,
+                timestamp: serverTimestamp(),
+                createdAt: serverTimestamp()
+            });
+            
+            console.log('🧪 Intent saved successfully to Firestore');
         } catch (error) {
             Alert.alert('❌ Save Error', `Error saving intent: ${error}`);
             throw error;
