@@ -104,8 +104,25 @@ export const EventListScreen: React.FC = () => {
       }
       
       console.log('🧪 EventListScreen: Loading user interests from Firestore...');
-      const interests = await eventInterestService.getUserInterestedEvents(user.id);
-      const interestIds = new Set(interests.map(interest => interest.eventId));
+      
+      // Import Firebase modules
+      const { db } = await import('@/config/firebase');
+      const { collection, query, getDocs } = await import('firebase/firestore');
+      
+      // Load from the intent-based system: users/{userId}/interested_events
+      const interestsQuery = query(collection(db, 'users', user.id, 'interested_events'));
+      const snapshot = await getDocs(interestsQuery);
+      
+      const interestIds = new Set<string>();
+      snapshot.forEach(docSnapshot => {
+        const data = docSnapshot.data();
+        if (data.eventId) {
+          // Use the same encoding as when saving
+          const { toDocId } = require('@/config/firebase');
+          const safeEventId = toDocId(data.eventId);
+          interestIds.add(safeEventId);
+        }
+      });
       
       console.log('🧪 EventListScreen: Loaded', interestIds.size, 'user interests from Firestore');
       console.log('🧪 EventListScreen: Interest IDs:', Array.from(interestIds));
