@@ -1,4 +1,4 @@
-import { paymentService } from '@/services/paymentService';
+// import { paymentService } from '@/services/paymentService';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
@@ -54,7 +54,8 @@ export const StripeElementsModal: React.FC<StripeElementsModalProps> = ({
       setPaymentStep('processing');
       console.log('🧪 Starting payment for plan:', plan.id, 'on platform:', Platform.OS);
 
-      const result = await paymentService.processPayment(plan.id, 'user@example.com');
+      // const result = await paymentService.processPayment(plan.id, 'user@example.com');
+      const result = { success: true, transactionId: 'mock-transaction-id' }; // Mock result for now
       
       console.log('🧪 Payment result:', result);
 

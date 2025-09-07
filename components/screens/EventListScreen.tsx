@@ -1,7 +1,9 @@
 import { CountryDropdown } from '@/components/ui/CountryDropdown';
+import { IntentSelectionBottomSheet, IntentType } from '@/components/ui/IntentSelectionBottomSheet';
 import { PremiumUpgradePopup } from '@/components/ui/PremiumUpgradePopup';
 import { useAuth } from '@/contexts/AuthContext';
 import { eventInterestService } from '@/services/eventInterestService';
+import { intentBasedMatchingService } from '@/services/intentBasedMatchingService';
 import { googleCustomSearchClient, GoogleSearchResult } from '@/services/googleCustomSearchService';
 import { LocationData, locationService, PostalCodeValidator } from '@/services/locationService';
 import { matchDetectionService } from '@/services/matchDetectionService';
@@ -63,6 +65,10 @@ export const EventListScreen: React.FC = () => {
   const [showPremiumPopup, setShowPremiumPopup] = useState(false);
   const [premiumTriggerType, setPremiumTriggerType] = useState<string>('');
   const [premiumCountdown, setPremiumCountdown] = useState(300);
+  
+  // Intent Selection Bottom Sheet State
+  const [showIntentBottomSheet, setShowIntentBottomSheet] = useState(false);
+  const [selectedEventForIntent, setSelectedEventForIntent] = useState<DanceEvent | null>(null);
 
   useEffect(() => {
     Alert.alert('🧪 useEffect 1', `User ID: ${user?.id || 'No user'}`);
@@ -265,7 +271,7 @@ export const EventListScreen: React.FC = () => {
     }
   };
 
-  // Handle "I'm Interested" button press
+  // Handle "I'm Interested" button press - now shows intent selection
   const handleInterestPress = async (event: DanceEvent) => {
     Alert.alert('🧪 Interest Button Pressed!', `Event: ${event.title}\nID: ${event.id}`);
     
@@ -277,34 +283,48 @@ export const EventListScreen: React.FC = () => {
 
       Alert.alert('🧪 User Found', `User ID: ${user.id}`);
       
-      // Test Firebase Auth directly
-      const { auth } = await import('@/config/firebase');
-      Alert.alert('🧪 Firebase Auth', `Current user: ${auth.currentUser?.uid || 'No Firebase user'}`);
+      // Show intent selection bottom sheet
+      setSelectedEventForIntent(event);
+      setShowIntentBottomSheet(true);
       
-      if (!auth.currentUser) {
-        Alert.alert('🧪 Auth Error', 'Firebase Auth user is null!');
-        return;
+    } catch (error) {
+      Alert.alert('Error', `Failed to process interest: ${error}`);
+    }
+  };
+
+  // Handle intent selection from bottom sheet
+  const handleIntentSelected = async (intentType: IntentType) => {
+    if (!selectedEventForIntent || !user) return;
+    
+    try {
+      Alert.alert('🧪 Intent Selected', `Intent: ${intentType} for event: ${selectedEventForIntent.title}`);
+      
+      // Save user intent
+      await intentBasedMatchingService.saveUserIntent(user.id, selectedEventForIntent.id, intentType);
+      
+      // Check for matches
+      const matchResult = await intentBasedMatchingService.checkForMatch(
+        user.id,
+        selectedEventForIntent.id,
+        selectedEventForIntent.title,
+        intentType
+      );
+      
+      // Update UI state
+      if (matchResult.matched) {
+        setUserInterests(prev => new Set([...prev, selectedEventForIntent.id]));
       }
       
-      console.log('🧪 EventListScreen: User interested in event:', event.title);
+      // Close bottom sheet
+      setShowIntentBottomSheet(false);
+      setSelectedEventForIntent(null);
       
-      // IMMEDIATE STATE CHANGE - Update UI instantly for better UX
-      setUserInterests(prev => {
-        const newSet = new Set([...prev, event.id]);
-        console.log('🧪 EventListScreen: Immediately updated userInterests set:', Array.from(newSet));
-        
-        // Also save to localStorage immediately for persistence
-        if (typeof window !== 'undefined') {
-          try {
-            localStorage.setItem(`userInterests_${user.id}`, JSON.stringify(Array.from(newSet)));
-            console.log('🧪 EventListScreen: Immediately saved to localStorage');
-          } catch (storageError) {
-            console.warn('🧪 EventListScreen: Error saving to localStorage:', storageError);
-          }
-        }
-        
-        return newSet;
-      });
+    } catch (error) {
+      Alert.alert('Error', `Failed to process intent: ${error}`);
+      setShowIntentBottomSheet(false);
+      setSelectedEventForIntent(null);
+    }
+  };
       
       // Add to loading state
       setLoadingInterests(prev => new Set([...prev, event.id]));
@@ -731,6 +751,16 @@ export const EventListScreen: React.FC = () => {
         }}
         triggerType={premiumTriggerType as any}
         countdownSeconds={premiumCountdown}
+      />
+
+      {/* Intent Selection Bottom Sheet */}
+      <IntentSelectionBottomSheet
+        visible={showIntentBottomSheet}
+        onIntentSelected={handleIntentSelected}
+        onDismiss={() => {
+          setShowIntentBottomSheet(false);
+          setSelectedEventForIntent(null);
+        }}
       />
     </SafeAreaView>
   );
