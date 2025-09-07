@@ -107,20 +107,31 @@ class IntentBasedMatchingService {
         intentType: IntentType
     ): Promise<void> {
         try {
+            console.log('🧪 IntentBasedMatchingService: Starting saveUserIntent');
+            console.log('🧪 IntentBasedMatchingService: userId:', userId);
+            console.log('🧪 IntentBasedMatchingService: eventId:', eventId);
+            console.log('🧪 IntentBasedMatchingService: intentType:', intentType);
+            
             Alert.alert('🧪 Saving Intent', `Saving intent ${intentType} for event ${eventId}`);
             
             // Import Firebase modules
+            console.log('🧪 IntentBasedMatchingService: Importing Firebase modules...');
             const { db } = await import('@/config/firebase');
             const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
             const { toDocId } = await import('@/config/firebase');
             
             // Encode the event ID to make it safe for Firestore document paths
+            console.log('🧪 IntentBasedMatchingService: Encoding event ID...');
             const safeEventId = toDocId(eventId);
             console.log('🧪 IntentBasedMatchingService: Original eventId:', eventId);
             console.log('🧪 IntentBasedMatchingService: Safe eventId:', safeEventId);
             
             // Save to Firestore subcollection: users/{userId}/interested_events/{safeEventId}
+            console.log('🧪 IntentBasedMatchingService: Creating document reference...');
             const eventDocRef = doc(db, 'users', userId, 'interested_events', safeEventId);
+            console.log('🧪 IntentBasedMatchingService: Document reference created:', eventDocRef.path);
+            
+            console.log('🧪 IntentBasedMatchingService: Saving to Firestore...');
             await setDoc(eventDocRef, {
                 eventId: eventId, // Store original ID in the document
                 intentType,
@@ -130,6 +141,7 @@ class IntentBasedMatchingService {
             
             console.log('🧪 Intent saved successfully to Firestore');
         } catch (error) {
+            console.error('🧪 IntentBasedMatchingService: Error in saveUserIntent:', error);
             Alert.alert('❌ Save Error', `Error saving intent: ${error}`);
             throw error;
         }
