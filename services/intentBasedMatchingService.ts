@@ -112,11 +112,17 @@ class IntentBasedMatchingService {
             // Import Firebase modules
             const { db } = await import('@/config/firebase');
             const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
+            const { toDocId } = await import('@/config/firebase');
             
-            // Save to Firestore subcollection: users/{userId}/interested_events/{eventId}
-            const eventDocRef = doc(db, 'users', userId, 'interested_events', eventId);
+            // Encode the event ID to make it safe for Firestore document paths
+            const safeEventId = toDocId(eventId);
+            console.log('🧪 IntentBasedMatchingService: Original eventId:', eventId);
+            console.log('🧪 IntentBasedMatchingService: Safe eventId:', safeEventId);
+            
+            // Save to Firestore subcollection: users/{userId}/interested_events/{safeEventId}
+            const eventDocRef = doc(db, 'users', userId, 'interested_events', safeEventId);
             await setDoc(eventDocRef, {
-                eventId,
+                eventId: eventId, // Store original ID in the document
                 intentType,
                 timestamp: serverTimestamp(),
                 createdAt: serverTimestamp()

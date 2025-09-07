@@ -323,16 +323,23 @@ export const EventListScreen: React.FC = () => {
       
       // Update UI state - always save the interest regardless of match result
       console.log('🧪 EventListScreen: Updating userInterests state...');
+      
+      // Import toDocId to encode the event ID the same way as Firestore
+      const { toDocId } = await import('@/config/firebase');
+      const safeEventId = toDocId(selectedEventForIntent.id);
+      console.log('🧪 EventListScreen: Original eventId:', selectedEventForIntent.id);
+      console.log('🧪 EventListScreen: Safe eventId for UI:', safeEventId);
+      
       setUserInterests(prev => {
         const newSet = new Set(prev);
-        newSet.add(selectedEventForIntent.id);
+        newSet.add(safeEventId); // Use the same encoded ID as Firestore
         console.log('🧪 EventListScreen: Updated userInterests:', Array.from(newSet));
         
         // Also save to localStorage for persistence
         if (typeof window !== 'undefined') {
           try {
             localStorage.setItem(`userInterests_${user.id}`, JSON.stringify(Array.from(newSet)));
-            console.log('🧪 EventListScreen: Saved interest to localStorage:', selectedEventForIntent.id);
+            console.log('🧪 EventListScreen: Saved interest to localStorage:', safeEventId);
           } catch (storageError) {
             console.warn('🧪 EventListScreen: Error saving to localStorage:', storageError);
           }
@@ -441,8 +448,17 @@ export const EventListScreen: React.FC = () => {
   const renderEventItem = ({ item: event }: { item: DanceEvent }) => {
     Alert.alert('🧪 Rendering Event', `Title: ${event.title}\nID: ${event.id}`);
     
-    const isInterested = userInterests.has(event.id);
-    const isLoading = loadingInterests.has(event.id);
+    // Import toDocId to encode the event ID the same way as Firestore
+    const { toDocId } = require('@/config/firebase');
+    const safeEventId = toDocId(event.id);
+    const isInterested = userInterests.has(safeEventId);
+    const isLoading = loadingInterests.has(safeEventId);
+    
+    console.log('🧪 EventListScreen: Checking interest for event:', event.title);
+    console.log('🧪 EventListScreen: Original eventId:', event.id);
+    console.log('🧪 EventListScreen: Safe eventId:', safeEventId);
+    console.log('🧪 EventListScreen: isInterested:', isInterested);
+    console.log('🧪 EventListScreen: userInterests:', Array.from(userInterests));
     
     return (
       <TouchableOpacity
