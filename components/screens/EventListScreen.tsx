@@ -284,8 +284,10 @@ export const EventListScreen: React.FC = () => {
       Alert.alert('🧪 User Found', `User ID: ${user.id}`);
       
       // Show intent selection bottom sheet
+      console.log('🧪 EventListScreen: Setting selectedEventForIntent and showing bottom sheet');
       setSelectedEventForIntent(event);
       setShowIntentBottomSheet(true);
+      console.log('🧪 EventListScreen: Bottom sheet should now be visible');
       
     } catch (error) {
       Alert.alert('Error', `Failed to process interest: ${error}`);
@@ -294,15 +296,24 @@ export const EventListScreen: React.FC = () => {
 
   // Handle intent selection from bottom sheet
   const handleIntentSelected = async (intentType: IntentType) => {
-    if (!selectedEventForIntent || !user) return;
+    console.log('🧪 EventListScreen: handleIntentSelected called with intent:', intentType);
+    console.log('🧪 EventListScreen: selectedEventForIntent:', selectedEventForIntent?.title);
+    console.log('🧪 EventListScreen: user:', user?.id);
+    
+    if (!selectedEventForIntent || !user) {
+      console.log('🧪 EventListScreen: Missing selectedEventForIntent or user, returning early');
+      return;
+    }
     
     try {
       Alert.alert('🧪 Intent Selected', `Intent: ${intentType} for event: ${selectedEventForIntent.title}`);
       
       // Save user intent
+      console.log('🧪 EventListScreen: Saving user intent to Firestore...');
       await intentBasedMatchingService.saveUserIntent(user.id, selectedEventForIntent.id, intentType);
       
       // Check for matches
+      console.log('🧪 EventListScreen: Checking for matches...');
       const matchResult = await intentBasedMatchingService.checkForMatch(
         user.id,
         selectedEventForIntent.id,
@@ -311,6 +322,7 @@ export const EventListScreen: React.FC = () => {
       );
       
       // Update UI state - always save the interest regardless of match result
+      console.log('🧪 EventListScreen: Updating userInterests state...');
       setUserInterests(prev => {
         const newSet = new Set(prev);
         newSet.add(selectedEventForIntent.id);
@@ -330,10 +342,12 @@ export const EventListScreen: React.FC = () => {
       });
       
       // Close bottom sheet
+      console.log('🧪 EventListScreen: Closing bottom sheet...');
       setShowIntentBottomSheet(false);
       setSelectedEventForIntent(null);
       
     } catch (error) {
+      console.error('🧪 EventListScreen: Error in handleIntentSelected:', error);
       Alert.alert('Error', `Failed to process intent: ${error}`);
       setShowIntentBottomSheet(false);
       setSelectedEventForIntent(null);
