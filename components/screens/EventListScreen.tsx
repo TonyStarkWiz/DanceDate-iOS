@@ -300,6 +300,9 @@ export const EventListScreen: React.FC = () => {
     console.log('🧪 EventListScreen: selectedEventForIntent:', selectedEventForIntent?.title);
     console.log('🧪 EventListScreen: user:', user?.id);
     
+    // Add a simple alert to confirm this function is being called
+    Alert.alert('🧪 DEBUG', `handleIntentSelected called with intent: ${intentType}`);
+    
     if (!selectedEventForIntent || !user) {
       console.log('🧪 EventListScreen: Missing selectedEventForIntent or user, returning early');
       return;
