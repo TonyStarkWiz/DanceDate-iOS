@@ -1,17 +1,18 @@
 // Real Firebase configuration with Firestore database
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 
 // Your Firebase configuration for DanceLinkBackend project
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyCDNh4HMY9YzDzqQDTvz_3RePe2-XSjabo",
+  apiKey: "AIzaSyB1DaILxSQ2WGYQsUfJDrO4aeT8Xc0cPP0",
   authDomain: "dancelinkbackend.firebaseapp.com",
   projectId: "dancelinkbackend",
-  storageBucket: "dancelinkbackend.appspot.com",
+  storageBucket: "dancelinkbackend.firebasestorage.app",
   messagingSenderId: "915121530642",
-  appId: "1:915121530642:android:249f990e5a8a67b1acf5cb",
-  measurementId: "G-XXXXXXXXXX"
+  appId: "1:915121530642:web:8639d9440a4dd2afacf5cb",
+  measurementId: "G-9VDJ2343DC"
 };
 
 // Initialize Firebase
@@ -28,9 +29,13 @@ googleProvider.addScope('email');
 // Initialize Firestore
 const db = getFirestore(app);
 
+// Helper function for safe document IDs
+export const toDocId = (raw: string) => encodeURIComponent(raw);
+
 // Firestore collections
 export const COLLECTIONS = {
   USERS: 'users',                    // ✅ Used extensively
+  PROFILES: 'profiles',              // ✅ Used for user profiles
   EVENTS: 'events',                  // ✅ Used for events
   MATCHES: 'matches',                // ✅ Used for user matches
   CHATS: 'chats',                   // ✅ Used for chat rooms
@@ -41,6 +46,7 @@ export const COLLECTIONS = {
   DANCE_EVENTS_FLAT: 'dance_events_flat', // ✅ Used for flattened events
   INTERESTED_EVENTS: 'interested_events', // ✅ Used for user event interests
   INTERESTED_USERS: 'interested_users',   // ✅ Used for event user interests
+  EVENT_INTERESTS: 'event_interests',     // ✅ Used for user event interests (new format)
   PROMO_CODES: 'promo_codes',             // ✅ Used for promotional codes
   USER_CREDITS: 'user_credits',          // ✅ Used for user credits
   BLOCKED: 'blocked',                    // ✅ Used for blocked users
@@ -67,13 +73,13 @@ export const firestoreService = {
       const userRef = doc(db, COLLECTIONS.USERS, userData.uid);
       await setDoc(userRef, {
         ...userData,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
-      console.log('User created in Firestore:', userData.uid);
+      console.log('🧪 User created in Firestore:', userData.uid);
       return userRef;
     } catch (error) {
-      console.error('Error creating user in Firestore:', error);
+      console.error('🧪 Error creating user in Firestore:', error);
       throw error;
     }
   },
@@ -98,11 +104,11 @@ export const firestoreService = {
       const userRef = doc(db, COLLECTIONS.USERS, uid);
       await updateDoc(userRef, {
         ...updates,
-        updatedAt: new Date().toISOString()
+        updatedAt: serverTimestamp()
       });
-      console.log('User updated in Firestore:', uid);
+      console.log('🧪 User updated in Firestore:', uid);
     } catch (error) {
-      console.error('Error updating user in Firestore:', error);
+      console.error('🧪 Error updating user in Firestore:', error);
       throw error;
     }
   },
@@ -114,13 +120,13 @@ export const firestoreService = {
       await setDoc(profileRef, {
         uid,
         ...profileData,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
-      console.log('Profile created in Firestore:', uid);
+      console.log('🧪 Profile created in Firestore:', uid);
       return profileRef;
     } catch (error) {
-      console.error('Error creating profile in Firestore:', error);
+      console.error('🧪 Error creating profile in Firestore:', error);
       throw error;
     }
   },
@@ -145,11 +151,11 @@ export const firestoreService = {
       const profileRef = doc(db, COLLECTIONS.PROFILES, uid);
       await updateDoc(profileRef, {
         ...updates,
-        updatedAt: new Date().toISOString()
+        updatedAt: serverTimestamp()
       });
-      console.log('Profile updated in Firestore:', uid);
+      console.log('🧪 Profile updated in Firestore:', uid);
     } catch (error) {
-      console.error('Error updating profile in Firestore:', error);
+      console.error('🧪 Error updating profile in Firestore:', error);
       throw error;
     }
   },
@@ -159,13 +165,13 @@ export const firestoreService = {
     try {
       const eventRef = await addDoc(collection(db, COLLECTIONS.EVENTS), {
         ...eventData,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
-      console.log('Event created in Firestore:', eventRef.id);
+      console.log('🧪 Event created in Firestore:', eventRef.id);
       return eventRef;
     } catch (error) {
-      console.error('Error creating event in Firestore:', error);
+      console.error('🧪 Error creating event in Firestore:', error);
       throw error;
     }
   },
@@ -188,7 +194,7 @@ export const firestoreService = {
       const events: any[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        events.push({ id: doc.id, ...data });
+        events.push({ id: doc.id, ...(data as any) });
       });
       
       return events;
@@ -203,13 +209,14 @@ export const firestoreService = {
     try {
       const matchRef = await addDoc(collection(db, COLLECTIONS.MATCHES), {
         ...matchData,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        participants: matchData.participants || [matchData.userId1, matchData.userId2],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
-      console.log('Match created in Firestore:', matchRef.id);
+      console.log('🧪 Match created in Firestore:', matchRef.id);
       return matchRef;
     } catch (error) {
-      console.error('Error creating match in Firestore:', error);
+      console.error('🧪 Error creating match in Firestore:', error);
       throw error;
     }
   },
@@ -237,28 +244,39 @@ export const firestoreService = {
     try {
       const chatRef = await addDoc(collection(db, COLLECTIONS.CHATS), {
         ...chatData,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
-      console.log('Chat created in Firestore:', chatRef.id);
+      console.log('🧪 Chat created in Firestore:', chatRef.id);
       return chatRef;
     } catch (error) {
-      console.error('Error creating chat in Firestore:', error);
+      console.error('🧪 Error creating chat in Firestore:', error);
       throw error;
     }
   },
 
   async sendMessage(chatId: string, messageData: any) {
     try {
-      const messageRef = await addDoc(collection(db, COLLECTIONS.MESSAGES), {
-        chatId,
-        ...messageData,
-        createdAt: new Date().toISOString()
+      const msgRef = await addDoc(
+        collection(db, COLLECTIONS.CHATS, chatId, 'messages'),
+        {
+          ...messageData,
+          timestamp: serverTimestamp(),
+          read: false,
+        }
+      );
+      
+      // Update chat metadata
+      await updateDoc(doc(db, COLLECTIONS.CHATS, chatId), {
+        lastMessage: messageData.text ?? '',
+        lastMessageTime: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
-      console.log('Message sent to Firestore:', messageRef.id);
-      return messageRef;
+      
+      console.log('🧪 Message sent to Firestore:', msgRef.id);
+      return msgRef;
     } catch (error) {
-      console.error('Error sending message to Firestore:', error);
+      console.error('🧪 Error sending message to Firestore:', error);
       throw error;
     }
   },
@@ -282,10 +300,58 @@ export const firestoreService = {
   async deleteDocument(collectionName: string, docId: string) {
     try {
       await deleteDoc(doc(db, collectionName, docId));
-      console.log(`Document deleted from ${collectionName}:`, docId);
+      console.log(`🧪 Document deleted from ${collectionName}:`, docId);
     } catch (error) {
-      console.error(`Error deleting document from ${collectionName}:`, error);
+      console.error(`🧪 Error deleting document from ${collectionName}:`, error);
       throw error;
+    }
+  },
+
+  // Interest state helper
+  async isInterested(uid: string, eventId: string) {
+    try {
+      const ref = doc(db, COLLECTIONS.USERS, uid, 'interested_events', toDocId(String(eventId)));
+      return (await getDoc(ref)).exists();
+    } catch (error) {
+      console.error('🧪 Error checking interest state:', error);
+      return false;
+    }
+  },
+
+  // Helper to set interest state
+  async setInterest(uid: string, eventId: string, interested: boolean) {
+    try {
+      const ref = doc(db, COLLECTIONS.USERS, uid, 'interested_events', toDocId(String(eventId)));
+      if (interested) {
+        await setDoc(ref, {
+          eventId: String(eventId),
+          interested: true,
+          timestamp: serverTimestamp()
+        });
+      } else {
+        await deleteDoc(ref);
+      }
+      console.log('🧪 Interest state updated:', { uid, eventId, interested });
+      return true;
+    } catch (error) {
+      console.error('🧪 Error setting interest state:', error);
+      return false;
+    }
+  },
+
+  // Helper to get user's interested events
+  async getUserInterestedEvents(uid: string) {
+    try {
+      const interestedQuery = collection(db, COLLECTIONS.USERS, uid, 'interested_events');
+      const querySnapshot = await getDocs(interestedQuery);
+      const events: any[] = [];
+      querySnapshot.forEach((doc) => {
+        events.push({ id: doc.id, ...doc.data() });
+      });
+      return events;
+    } catch (error) {
+      console.error('🧪 Error getting user interested events:', error);
+      return [];
     }
   }
 };

@@ -14,6 +14,9 @@ import {
     View
 } from 'react-native';
 
+
+import { BackButton } from '../ui/BackButton';
+
 interface DancePartner {
   id: string;
   name: string;
@@ -503,7 +506,4 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
 });
-
-
-import { BackButton } from '../ui/BackButton';
       <BackButton />

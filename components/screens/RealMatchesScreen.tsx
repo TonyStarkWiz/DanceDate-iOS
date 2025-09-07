@@ -23,12 +23,12 @@ interface RealMatch {
   userId: string;
   userName: string;
   userEmail: string;
-  sharedEvents: Array<{
+  sharedEvents: {
     eventId: string;
     eventTitle: string;
     eventInstructor: string;
     eventLocation: string;
-  }>;
+  }[];
   matchStrength: number;
   commonInterests: string[];
   lastActive: string;

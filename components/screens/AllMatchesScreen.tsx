@@ -16,6 +16,9 @@ import {
     View,
 } from 'react-native';
 
+
+import { BackButton } from '../ui/BackButton';
+
 interface Match {
   id: string;
   name: string;
@@ -536,7 +539,4 @@ const styles = StyleSheet.create({
     height: 100,
   },
 });
-
-
-import { BackButton } from '../ui/BackButton';
       <BackButton />

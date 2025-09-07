@@ -1,6 +1,8 @@
+import { auth } from '@/config/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { signOut as firebaseSignOut } from 'firebase/auth';
 import React from 'react';
 import {
     Alert,
@@ -11,8 +13,9 @@ import {
     View,
 } from 'react-native';
 
+
 export const SettingsAndActivityScreen: React.FC = () => {
-  const { signOutUser } = useAuth();
+  const { signOutUser, user } = useAuth();
   const [isSigningOut, setIsSigningOut] = React.useState(false);
 
   const handleBackPress = () => {
@@ -58,29 +61,67 @@ export const SettingsAndActivityScreen: React.FC = () => {
           onPress: async () => {
             try {
               setIsSigningOut(true);
-              console.log('🧪 Starting sign out process...');
-              await signOutUser();
-              console.log('🧪 Sign out completed successfully');
+              console.log('🧪 SettingsScreen: Starting direct sign out process...');
+              
+              // Method 1: Try AuthContext signOut first
+              try {
+                console.log('🧪 SettingsScreen: Attempting AuthContext signOut...');
+                await signOutUser();
+                console.log('🧪 SettingsScreen: AuthContext signOut successful');
+              } catch (authError) {
+                console.warn('🧪 SettingsScreen: AuthContext signOut failed:', authError);
+                
+                // Method 2: Direct Firebase signOut as fallback
+                console.log('🧪 SettingsScreen: Attempting direct Firebase signOut...');
+                await firebaseSignOut(auth);
+                console.log('🧪 SettingsScreen: Direct Firebase signOut successful');
+              }
+              
+              // Clear all local storage data
+              if (typeof window !== 'undefined') {
+                try {
+                  localStorage.clear();
+                  sessionStorage.clear();
+                  console.log('🧪 SettingsScreen: Cleared all local storage');
+                } catch (storageError) {
+                  console.warn('🧪 SettingsScreen: Error clearing storage:', storageError);
+                }
+              }
+              
+              // Force immediate navigation to signin
+              console.log('🧪 SettingsScreen: Force navigating to signin...');
+              router.replace('/signin');
+              
+              // Additional safety: Navigate again after a delay
+              setTimeout(() => {
+                console.log('🧪 SettingsScreen: Safety navigation to signin...');
+                router.replace('/signin');
+              }, 100);
               
               // Show success message
-              Alert.alert(
-                'Signed Out',
-                'You have been successfully signed out.',
-                [
-                  {
-                    text: 'OK',
-                    onPress: () => {
-                      // Force navigation to welcome screen
-                      router.replace('/welcome');
-                    }
-                  }
-                ]
-              );
+              setTimeout(() => {
+                Alert.alert(
+                  'Signed Out Successfully',
+                  'You have been logged out. Please sign in to continue.',
+                  [{ text: 'OK' }]
+                );
+              }, 300);
+              
             } catch (error) {
-              console.error('🧪 Sign out error:', error);
+              console.error('🧪 SettingsScreen: Complete sign out error:', error);
+              
+              // Emergency fallback: Force clear everything and navigate
+              if (typeof window !== 'undefined') {
+                localStorage.clear();
+                sessionStorage.clear();
+              }
+              
+              // Force navigation regardless of error
+              router.replace('/signin');
+              
               Alert.alert(
-                'Sign Out Error', 
-                'Failed to sign out. Please try again.',
+                'Logged Out', 
+                'Session cleared. Please sign in again.',
                 [{ text: 'OK' }]
               );
             } finally {
@@ -149,6 +190,47 @@ export const SettingsAndActivityScreen: React.FC = () => {
 
         {/* Spacer */}
         <View style={styles.spacer} />
+
+        {/* User Info Section */}
+        {user && (
+          <View style={styles.userInfoSection}>
+            <Text style={styles.userInfoText}>
+              Signed in as: {user.email || user.username || 'Unknown User'}
+            </Text>
+          </View>
+        )}
+
+        {/* Debug Quick Logout Button */}
+        <TouchableOpacity 
+          style={styles.debugLogoutButton}
+          onPress={async () => {
+            try {
+              console.log('🧪 DEBUG: Quick logout pressed');
+              
+              // Clear localStorage immediately
+              if (typeof window !== 'undefined') {
+                localStorage.clear();
+                sessionStorage.clear();
+              }
+              
+              // Direct Firebase signOut
+              await firebaseSignOut(auth);
+              console.log('🧪 DEBUG: Firebase signOut completed');
+              
+              // Force navigate to signin
+              router.replace('/signin');
+              console.log('🧪 DEBUG: Navigation to signin completed');
+              
+            } catch (error) {
+              console.error('🧪 DEBUG: Quick logout error:', error);
+              // Force navigate anyway
+              router.replace('/signin');
+            }
+          }}
+        >
+          <Ionicons name="flash-outline" size={20} color="#FFD700" />
+          <Text style={styles.debugLogoutText}>Quick Logout (Debug)</Text>
+        </TouchableOpacity>
 
         {/* Sign Out Button */}
         <TouchableOpacity 
@@ -231,6 +313,21 @@ const styles = StyleSheet.create({
   spacer: {
     flex: 1,
   },
+  userInfoSection: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  userInfoText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -251,7 +348,21 @@ const styles = StyleSheet.create({
   signOutButtonDisabled: {
     opacity: 0.6,
   },
+  debugLogoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 215, 0, 0.2)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.5)',
+  },
+  debugLogoutText: {
+    color: '#FFD700',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
 });
-
-import { BackButton } from '../ui/BackButton';
-      <BackButton />

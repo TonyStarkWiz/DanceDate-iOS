@@ -2,7 +2,7 @@
   "expo": {
     "name": "DanceDate",
     "slug": "dancedate-ios",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "dancedateios",
@@ -16,7 +16,11 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.antho.dancedate",
-      "buildNumber": "2",
+      "buildNumber": "5",
+      "watch": {
+        "bundleIdentifier": "com.antho.dancedate.watchkitapp",
+        "watchKitApp": true
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "We use the camera so you can take photos for your dance profile and share dance moments.",
@@ -145,11 +149,18 @@
             "buildToolsVersion": "34.0.0"
           }
         }
+      ],
+      [
+        "expo-dev-client",
+        {
+          "addGeneratedScheme": false
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true
     },
+    "jsEngine": "hermes",
     "extra": {
       "router": {},
       "eas": {

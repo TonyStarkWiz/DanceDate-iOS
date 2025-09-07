@@ -10,6 +10,11 @@ import {
     View,
 } from 'react-native';
 
+
+
+
+import { BackButton } from '../ui/BackButton';
+
 const { width, height } = Dimensions.get('window');
 
 const tourSteps = [
@@ -263,9 +268,4 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
 });
-
-
-
-
-import { BackButton } from '../ui/BackButton';
       <BackButton />

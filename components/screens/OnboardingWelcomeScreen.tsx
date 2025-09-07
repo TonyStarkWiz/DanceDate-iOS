@@ -1,6 +1,11 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+
+
+
+import { BackButton } from '../ui/BackButton';
+
 export default function OnboardingWelcomeScreen() {
   return (
     <View style={styles.container}>
@@ -153,9 +158,4 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
 });
-
-
-
-
-import { BackButton } from '../ui/BackButton';
       <BackButton />

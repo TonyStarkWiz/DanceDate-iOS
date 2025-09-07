@@ -17,8 +17,9 @@ export const FeedTopBar: React.FC = () => {
     console.log('Search pressed');
   };
 
-  const handleNotificationsPress = () => {
-    console.log('Notifications pressed');
+  const handleMenuPress = () => {
+    console.log('🧪 FeedTopBar: Hamburger menu pressed - navigating to settings');
+    router.push('/settings_and_activity');
   };
 
   return (
@@ -40,8 +41,8 @@ export const FeedTopBar: React.FC = () => {
           <Ionicons name="search" size={24} color="#fff" />
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.actionButton} onPress={handleNotificationsPress}>
-          <Ionicons name="notifications-outline" size={24} color="#fff" />
+        <TouchableOpacity style={styles.actionButton} onPress={handleMenuPress}>
+          <Ionicons name="menu" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
     </View>

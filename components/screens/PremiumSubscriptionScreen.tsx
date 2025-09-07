@@ -1,15 +1,10 @@
-import ApplePayButton from '@/components/ui/ApplePayButton';
-import { STRIPE_CONFIG } from '@/config/stripe';
+import { StripeElementsModal } from '@/components/ui/StripeElementsModal';
 import { useAuth } from '@/contexts/AuthContext';
-import { applePayService } from '@/services/applePayService';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -17,65 +12,40 @@ import {
     View,
 } from 'react-native';
 
+import { BackButton } from '../ui/BackButton';
+
 const PremiumSubscriptionScreen: React.FC = () => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<'premiumMonthly' | 'premiumAnnual'>('premiumMonthly');
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('monthly');
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const { user } = useAuth();
 
-  const handleApplePayPayment = async () => {
-    if (!applePayService.isApplePayAvailable()) {
-      Alert.alert(
-        'Apple Pay Not Available',
-        'Apple Pay is not supported on this device. Please use a different payment method.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    if (!user?.email) {
-      Alert.alert('Error', 'Please log in to make a payment.');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      console.log('🧪 Starting Apple Pay payment for:', selectedPlan);
-      
-      const result = await applePayService.requestPremiumPayment(selectedPlan, user.email);
-      
-      if (result.success) {
-        console.log('🧪 Payment successful:', result);
-        Alert.alert(
-          'Payment Successful!',
-          'Welcome to DanceDate Premium! You now have access to all premium features.',
-          [
-            {
-              text: 'Continue',
-              onPress: () => router.push('/postLoginWelcome')
-            }
-          ]
-        );
-      } else {
-        console.log('🧪 Payment failed:', result.error);
-        Alert.alert('Payment Failed', result.error || 'Unable to process payment. Please try again.');
-      }
-    } catch (error) {
-      console.error('🧪 Payment error:', error);
-      Alert.alert('Payment Error', 'An unexpected error occurred. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handlePlanSelection = (plan: 'premiumMonthly' | 'premiumAnnual') => {
+  const handlePlanSelection = (plan: 'monthly' | 'annual') => {
     setSelectedPlan(plan);
   };
 
-  const getSelectedProduct = () => {
-    return STRIPE_CONFIG.products[selectedPlan];
+  const handlePaymentSuccess = (result: any) => {
+    console.log('🧪 Payment successful:', result);
+    setShowPaymentModal(false);
+    // Navigate to success screen or show success message
+    router.push('/postLoginWelcome');
   };
 
-  const selectedProduct = getSelectedProduct();
+  const handlePaymentError = (errorType: string, message: string) => {
+    console.error('🧪 Payment error:', errorType, message);
+    setShowPaymentModal(false);
+  };
+
+  const getSelectedPlan = () => {
+    return {
+      id: selectedPlan,
+      name: selectedPlan === 'monthly' ? 'Premium Monthly' : 'Premium Annual',
+      price: selectedPlan === 'monthly' ? '$14.99' : '$149.99',
+      period: selectedPlan === 'monthly' ? 'month' : 'year',
+      features: selectedPlan === 'monthly' 
+        ? ['Unlimited Google Custom Search', 'Advanced Partner Matching', 'Unlimited Chat Messages', 'Priority Support', 'Early Access to New Features', 'Premium Profile Badges']
+        : ['All Monthly Features', 'Save 17% ($29.89)', '2 Months Free', 'VIP Status', 'Priority App Updates', 'Exclusive Event Access']
+    };
+  };
 
   return (
     <LinearGradient
@@ -135,16 +105,16 @@ const PremiumSubscriptionScreen: React.FC = () => {
           <TouchableOpacity
             style={[
               styles.planCard,
-              selectedPlan === 'premiumMonthly' && styles.selectedPlan
+              selectedPlan === 'monthly' && styles.selectedPlan
             ]}
-            onPress={() => handlePlanSelection('premiumMonthly')}
+            onPress={() => handlePlanSelection('monthly')}
           >
             <View style={styles.planHeader}>
               <Text style={styles.planName}>Premium Monthly</Text>
               <Text style={styles.planPrice}>$14.99</Text>
               <Text style={styles.planPeriod}>per month</Text>
             </View>
-            {selectedPlan === 'premiumMonthly' && (
+            {selectedPlan === 'monthly' && (
               <View style={styles.selectedIndicator}>
                 <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
               </View>
@@ -155,9 +125,9 @@ const PremiumSubscriptionScreen: React.FC = () => {
           <TouchableOpacity
             style={[
               styles.planCard,
-              selectedPlan === 'premiumAnnual' && styles.selectedPlan
+              selectedPlan === 'annual' && styles.selectedPlan
             ]}
-            onPress={() => handlePlanSelection('premiumAnnual')}
+            onPress={() => handlePlanSelection('annual')}
           >
             <View style={styles.planHeader}>
               <Text style={styles.planName}>Premium Annual</Text>
@@ -167,7 +137,7 @@ const PremiumSubscriptionScreen: React.FC = () => {
                 <Text style={styles.savingsText}>Save 17%</Text>
               </View>
             </View>
-            {selectedPlan === 'premiumAnnual' && (
+            {selectedPlan === 'annual' && (
               <View style={styles.selectedIndicator}>
                 <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
               </View>
@@ -179,25 +149,14 @@ const PremiumSubscriptionScreen: React.FC = () => {
         <View style={styles.paymentSection}>
           <Text style={styles.sectionTitle}>Payment</Text>
           
-          {Platform.OS === 'ios' ? (
-            <ApplePayButton
-              onPress={handleApplePayPayment}
-              title={`Pay ${selectedProduct.price} with Apple Pay`}
-              disabled={isLoading}
-            />
-          ) : (
-            <TouchableOpacity
-              style={[styles.payButton, isLoading && styles.payButtonDisabled]}
-              onPress={handleApplePayPayment}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.payButtonText}>Pay ${selectedProduct.price}</Text>
-              )}
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={styles.payButton}
+            onPress={() => setShowPaymentModal(true)}
+          >
+            <Text style={styles.payButtonText}>
+              {selectedPlan === 'monthly' ? 'Purchase $14.99' : 'Purchase $149.99'}
+            </Text>
+          </TouchableOpacity>
 
           <Text style={styles.termsText}>
             By subscribing, you agree to our Terms of Service and Privacy Policy.
@@ -205,6 +164,15 @@ const PremiumSubscriptionScreen: React.FC = () => {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Payment Modal */}
+      <StripeElementsModal
+        visible={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        onSuccess={handlePaymentSuccess}
+        onError={handlePaymentError}
+        plan={getSelectedPlan()}
+      />
     </LinearGradient>
   );
 };
@@ -341,6 +309,4 @@ const styles = StyleSheet.create({
 });
 
 export default PremiumSubscriptionScreen;
-
-import { BackButton } from '../ui/BackButton';
       <BackButton />

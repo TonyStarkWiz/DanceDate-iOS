@@ -103,27 +103,36 @@ export class GoogleCustomSearchHttpClient {
     }
   }
 
-  // Build intelligent search queries - mirrors Android's query building
+  // Build intelligent search queries - optimized specifically for dance events
   private buildSearchQueries(query: string, location: string): string[] {
-    const baseQuery = query.toLowerCase();
     const locationSuffix = location ? ` ${location}` : '';
     
-    const searchQueries = [
-      `${baseQuery} events${locationSuffix}`,
-      `${baseQuery} classes${locationSuffix}`,
-      `${baseQuery} workshops${locationSuffix}`,
-      `${baseQuery} social${locationSuffix}`,
-      `${baseQuery} studio${locationSuffix}`
+    // Specific dance event queries - ensuring only dance-related results
+    const danceEventQueries = [
+      `dance events${locationSuffix}`,
+      `dance classes${locationSuffix}`,
+      `dance lessons${locationSuffix}`,
+      `dance workshops${locationSuffix}`,
+      `dance social events${locationSuffix}`,
+      `salsa events${locationSuffix}`,
+      `bachata events${locationSuffix}`,
+      `tango events${locationSuffix}`,
+      `ballroom dance events${locationSuffix}`,
+      `swing dance events${locationSuffix}`,
+      `latin dance events${locationSuffix}`,
+      `dance studio events${locationSuffix}`
     ];
     
-    // Add platform-specific queries
+    // Platform-specific queries for dance events
     const platformQueries = [
-      `site:facebook.com ${baseQuery}${locationSuffix}`,
-      `site:eventbrite.com ${baseQuery}${locationSuffix}`,
-      `site:instagram.com ${baseQuery}${locationSuffix}`
+      `site:eventbrite.com dance events${locationSuffix}`,
+      `site:meetup.com dance${locationSuffix}`,
+      `site:facebook.com/events dance${locationSuffix}`,
+      `site:dancecalendar.com${locationSuffix}`,
+      `site:danceevents.com${locationSuffix}`
     ];
     
-    return [...searchQueries, ...platformQueries];
+    return [...danceEventQueries, ...platformQueries];
   }
 
   // Perform individual search
@@ -133,8 +142,9 @@ export class GoogleCustomSearchHttpClient {
     url.searchParams.set('cx', this.searchEngineId);
     url.searchParams.set('q', query);
     url.searchParams.set('num', Math.min(maxResults, 10).toString());
-    url.searchParams.set('searchType', 'image');
-    url.searchParams.set('imgType', 'photo');
+    // Remove image search - we want web content for dance classes
+    // url.searchParams.set('searchType', 'image');
+    // url.searchParams.set('imgType', 'photo');
     
     try {
       const response = await fetch(url.toString());

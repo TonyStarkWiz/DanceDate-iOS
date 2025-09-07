@@ -1,10 +1,16 @@
+import { CountryDropdown } from '@/components/ui/CountryDropdown';
 import { useAuth } from '@/contexts/AuthContext';
+import { eventInterestService } from '@/services/eventInterestService';
+import { FormalBallEvent, FormalBallSearchOptions, formalBallSearchService } from '@/services/formalBallSearchService';
+import { LocationData, locationService, PostalCodeValidator } from '@/services/locationService';
+import { matchDetectionService } from '@/services/matchDetectionService';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    FlatList,
     SafeAreaView,
     ScrollView,
     StyleSheet,
@@ -14,126 +20,237 @@ import {
     View,
 } from 'react-native';
 
-// Mock data for formal ball events - replace with real API calls later
-const mockFormalBallEvents = [
-  {
-    id: '1',
-    title: 'Annual Charity Gala Ball',
-    instructor: 'Madame Victoria',
-    location: 'Grand Ballroom, Downtown',
-    date: 'December 15, 2024',
-    time: '7:00 PM',
-    price: '$150',
-    danceStyles: ['Waltz', 'Foxtrot', 'Tango'],
-    description: 'Elegant charity ball supporting local arts foundation',
-    imageUrl: null,
-  },
-  {
-    id: '2',
-    title: 'Masquerade Mystery Ball',
-    instructor: 'Count Sebastian',
-    location: 'Historic Opera House',
-    date: 'January 20, 2025',
-    time: '8:00 PM',
-    price: '$200',
-    danceStyles: ['Waltz', 'Viennese Waltz', 'Polka'],
-    description: 'Enchanting masquerade ball with live orchestra',
-    imageUrl: null,
-  },
-  {
-    id: '3',
-    title: 'Viennese Waltz Ball',
-    instructor: 'Professor Strauss',
-    location: 'Imperial Ballroom',
-    date: 'February 14, 2025',
-    time: '6:30 PM',
-    price: '$180',
-    danceStyles: ['Viennese Waltz', 'Waltz', 'Quickstep'],
-    description: 'Traditional Viennese waltz celebration',
-    imageUrl: null,
-  },
-];
-
 export const BallScreen: React.FC = () => {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCountry, setSelectedCountry] = useState<string>('US');
   const [postalCode, setPostalCode] = useState('');
   const [isPostalCodeValid, setIsPostalCodeValid] = useState(false);
-  const [showAiGeneratedEvents, setShowAiGeneratedEvents] = useState(false);
-  const [aiGeneratedEvents, setAiGeneratedEvents] = useState(mockFormalBallEvents);
-  const [isGeneratingEvents, setIsGeneratingEvents] = useState(false);
+  const [showFormalBallEvents, setShowFormalBallEvents] = useState(false);
+  const [formalBallEvents, setFormalBallEvents] = useState<FormalBallEvent[]>([]);
+  const [isSearchingEvents, setIsSearchingEvents] = useState(false);
+  const [userLocation, setUserLocation] = useState<LocationData | null>(null);
+  const [useLocation, setUseLocation] = useState(false);
   const [specializedRemainingSearches, setSpecializedRemainingSearches] = useState(3);
   const [showSpecializedPaywall, setShowSpecializedPaywall] = useState(false);
+  
+  // Interest tracking
+  const [userInterests, setUserInterests] = useState<Set<string>>(new Set());
+  const [loadingInterests, setLoadingInterests] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    // Simulate loading
+    // Initialize screen
     const timer = setTimeout(() => {
       setIsLoading(false);
     }, 1000);
+    
+    if (user?.id) {
+      loadUserInterests();
+    }
+    
     return () => clearTimeout(timer);
-  }, []);
+  }, [user?.id]);
 
-  const handleUseMyLocation = () => {
-    Alert.alert(
-      'Use My Location',
-      'This would use your GPS location to find formal ball events nearby.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Use Location',
-          onPress: () => {
-            setIsGeneratingEvents(true);
-            // Simulate AI event generation
-            setTimeout(() => {
-              setShowAiGeneratedEvents(true);
-              setIsGeneratingEvents(false);
-            }, 2000);
-          },
-        },
-      ]
-    );
+  // Load user's event interests from Firestore
+  const loadUserInterests = async () => {
+    try {
+      if (!user?.id) {
+        console.log('🧪 BallScreen: No user ID, skipping interest load');
+        return;
+      }
+      
+      console.log('🧪 BallScreen: Loading user interests from Firestore...');
+      const interests = await eventInterestService.getUserInterestedEvents(user.id);
+      const interestIds = new Set(interests.map(interest => interest.eventId));
+      
+      console.log('🧪 BallScreen: Loaded', interestIds.size, 'user interests from Firestore');
+      console.log('🧪 BallScreen: Interest IDs:', Array.from(interestIds));
+      
+      setUserInterests(interestIds);
+      
+      // Also save to localStorage as backup
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`userInterests_${user.id}`, JSON.stringify(Array.from(interestIds)));
+          console.log('🧪 BallScreen: Saved interests to localStorage as backup');
+        } catch (storageError) {
+          console.warn('🧪 BallScreen: Error saving to localStorage:', storageError);
+        }
+      }
+      
+    } catch (error) {
+      console.error('🧪 BallScreen: Error loading user interests from Firestore:', error);
+      
+      // Fallback: try to load from localStorage
+      if (typeof window !== 'undefined' && user?.id) {
+        try {
+          const cachedInterests = localStorage.getItem(`userInterests_${user.id}`);
+          if (cachedInterests) {
+            const interestIds = new Set(JSON.parse(cachedInterests));
+            setUserInterests(interestIds);
+            console.log('🧪 BallScreen: Loaded interests from localStorage fallback');
+          }
+        } catch (fallbackError) {
+          console.warn('🧪 BallScreen: Fallback localStorage load failed:', fallbackError);
+        }
+      }
+    }
   };
 
-  const handleSearchByCode = () => {
+  // Validate postal code when it changes
+  useEffect(() => {
+    if (postalCode) {
+      const validation = PostalCodeValidator.validatePostalCode(postalCode, selectedCountry);
+      setIsPostalCodeValid(validation.isValid);
+    } else {
+      setIsPostalCodeValid(false);
+    }
+  }, [postalCode, selectedCountry]);
+
+  const handleUseMyLocation = async () => {
+    try {
+      console.log('🧪 BallScreen: Requesting GPS location...');
+      setIsSearchingEvents(true);
+      
+      const location = await locationService.getCurrentLocation();
+      setUserLocation(location);
+      setUseLocation(true);
+      
+      Alert.alert(
+        'Location Set',
+        `Using location: ${location.locationName || `${location.latitude}, ${location.longitude}`}`,
+        [{ text: 'OK' }]
+      );
+      
+      // Search for formal ball events using location
+      await searchFormalBallEvents({ location });
+      
+    } catch (error) {
+      console.error('🧪 BallScreen: Error getting location:', error);
+      Alert.alert('Location Error', 'Failed to get your location. Please try again or use postal code search.');
+      setIsSearchingEvents(false);
+    }
+  };
+
+  const handleSearchByCode = async () => {
     if (selectedCountry && postalCode && isPostalCodeValid) {
-      setIsGeneratingEvents(true);
-      // Simulate AI event generation
-      setTimeout(() => {
-        setShowAiGeneratedEvents(true);
-        setIsGeneratingEvents(false);
-      }, 2000);
+      setIsSearchingEvents(true);
+      
+      try {
+        // Search for formal ball events using postal code
+        await searchFormalBallEvents({ 
+          postalCode, 
+          country: selectedCountry 
+        });
+      } catch (error) {
+        console.error('🧪 BallScreen: Error searching by postal code:', error);
+        Alert.alert('Search Error', 'Failed to search for formal ball events. Please try again.');
+        setIsSearchingEvents(false);
+      }
     } else {
       Alert.alert('Invalid Input', 'Please enter a valid postal code and select a country.');
     }
   };
 
-  const handleSpecializedSearch = (searchType: string) => {
+  // Main search function for formal ball events
+  const searchFormalBallEvents = async (options: FormalBallSearchOptions) => {
+    try {
+      console.log('🧪 BallScreen: Searching for formal ball events with options:', options);
+      
+      const events = await formalBallSearchService.searchFormalBallEvents({
+        ...options,
+        maxResults: 15
+      });
+      
+      setFormalBallEvents(events);
+      setShowFormalBallEvents(true);
+      setIsSearchingEvents(false);
+      
+      if (events.length === 0) {
+        Alert.alert(
+          'No Events Found', 
+          'No formal ball events found in your area. Try expanding your search or checking back later.'
+        );
+      } else {
+        Alert.alert('Search Complete', `Found ${events.length} formal ball events in your area!`);
+      }
+      
+    } catch (error) {
+      console.error('🧪 BallScreen: Error searching for formal ball events:', error);
+      Alert.alert('Search Error', 'Failed to search for formal ball events. Please try again.');
+      setIsSearchingEvents(false);
+    }
+  };
+
+  const handleSpecializedSearch = async (searchType: string) => {
     if (specializedRemainingSearches > 0) {
       setSpecializedRemainingSearches(prev => prev - 1);
-      setIsGeneratingEvents(true);
+      setIsSearchingEvents(true);
       
-      // Simulate specialized search
-      setTimeout(() => {
-        setShowAiGeneratedEvents(true);
-        setIsGeneratingEvents(false);
-        Alert.alert('Search Complete', `Found ${searchType} events in your area!`);
-      }, 1500);
+      try {
+        // Map search types to event types
+        const eventTypeMap: { [key: string]: string[] } = {
+          'Charity Ball': ['charity'],
+          'Masquerade Ball': ['masquerade'],
+          'Waltz Ball': ['waltz', 'viennese']
+        };
+        
+        const eventTypes = eventTypeMap[searchType] || [];
+        
+        // Use current location or postal code
+        const searchOptions: FormalBallSearchOptions = useLocation && userLocation 
+          ? { location: userLocation, eventTypes }
+          : { postalCode, country: selectedCountry, eventTypes };
+        
+        await searchFormalBallEvents(searchOptions);
+        
+      } catch (error) {
+        console.error('🧪 BallScreen: Error in specialized search:', error);
+        Alert.alert('Search Error', 'Failed to perform specialized search. Please try again.');
+        setIsSearchingEvents(false);
+      }
     } else {
       setShowSpecializedPaywall(true);
     }
   };
 
-  const handleRefreshEvents = () => {
-    setIsGeneratingEvents(true);
-    setTimeout(() => {
-      setIsGeneratingEvents(false);
-      Alert.alert('Refreshed', 'Formal ball events have been refreshed!');
-    }, 1000);
+  const handleRefreshEvents = async () => {
+    setIsSearchingEvents(true);
+    
+    try {
+      // Refresh with current search parameters
+      const searchOptions: FormalBallSearchOptions = useLocation && userLocation 
+        ? { location: userLocation }
+        : { postalCode, country: selectedCountry };
+      
+      await searchFormalBallEvents(searchOptions);
+      
+    } catch (error) {
+      console.error('🧪 BallScreen: Error refreshing events:', error);
+      Alert.alert('Refresh Error', 'Failed to refresh events. Please try again.');
+      setIsSearchingEvents(false);
+    }
   };
 
-  const handleEventPress = (event: any) => {
-    router.push(`/eventDetail/${event.title}/${event.instructor}/${event.location}`);
+  const handleEventPress = (event: FormalBallEvent) => {
+    // Navigate to event detail or open external link
+    if (event.link) {
+      // For now, show alert with event details
+      Alert.alert(
+        event.title,
+        `${event.description}\n\nLocation: ${event.location}\nDate: ${event.date || 'TBD'}\nTime: ${event.time || 'TBD'}\nPrice: ${event.price || 'Contact for pricing'}\n\nDance Styles: ${event.danceStyles.join(', ')}`,
+        [
+          { text: 'Close', style: 'cancel' },
+          { text: 'View Details', onPress: () => {
+            // In a real app, you might open the external link or navigate to a detail screen
+            console.log('🧪 BallScreen: Opening event link:', event.link);
+          }}
+        ]
+      );
+    } else {
+      // Navigate to a generic event detail screen
+      router.push('/eventList' as any);
+    }
   };
 
   const handleUpgradeToPremium = () => {
@@ -143,6 +260,116 @@ export const BallScreen: React.FC = () => {
   const handleUpgradeSpecialized = (tier: string) => {
     setShowSpecializedPaywall(false);
     Alert.alert('Upgrade Complete', `You've been upgraded to ${tier}!`);
+  };
+
+  // Handle "I'm Interested" button press for ball events
+  const handleInterestPress = async (event: FormalBallEvent) => {
+    try {
+      if (!user) {
+        Alert.alert('Error', 'You must be logged in to show interest in ball events.');
+        return;
+      }
+
+      console.log('🧪 BallScreen: User interested in ball event:', event.title);
+      
+      // IMMEDIATE STATE CHANGE - Update UI instantly for better UX
+      setUserInterests(prev => {
+        const newSet = new Set([...prev, event.id]);
+        console.log('🧪 BallScreen: Immediately updated userInterests set:', Array.from(newSet));
+        
+        // Also save to localStorage immediately for persistence
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`userInterests_${user.id}`, JSON.stringify(Array.from(newSet)));
+            console.log('🧪 BallScreen: Immediately saved to localStorage');
+          } catch (storageError) {
+            console.warn('🧪 BallScreen: Error saving to localStorage:', storageError);
+          }
+        }
+        
+        return newSet;
+      });
+      
+      // Add to loading state
+      setLoadingInterests(prev => new Set([...prev, event.id]));
+      
+      // Save user interest to Firestore (in background)
+      await eventInterestService.saveEventInterest(user.id, {
+        id: event.id,
+        title: event.title,
+        description: event.description,
+        location: event.location,
+        source: event.source,
+        url: event.website,
+        startDate: event.startDate,
+        instructor: 'Ball Event',
+        tags: ['ball', 'formal', ...event.danceStyles]
+      });
+      
+      // Check for matches after saving interest
+      try {
+        const matchResult = await matchDetectionService.checkForMatchesImmediately(user.id, {
+          id: event.id,
+          title: event.title,
+          description: event.description,
+          location: event.location,
+          source: event.source,
+          url: event.website,
+          startDate: event.startDate,
+          instructor: 'Ball Event',
+          tags: ['ball', 'formal', ...event.danceStyles]
+        });
+        
+        if (matchResult.newMatches.length > 0) {
+          console.log('🧪 BallScreen: Found new matches!', matchResult.newMatches.length);
+          
+          // Show match alert
+          Alert.alert(
+            '🎉 You Have a Match!',
+            `You matched with ${matchResult.newMatches[0].potentialPartner.name} for "${event.title}"! You both are interested in this ball event.`,
+            [
+              {
+                text: 'View Matches',
+                onPress: () => {
+                  router.push('/(tabs)/matches');
+                }
+              },
+              { text: 'OK', style: 'default' }
+            ]
+          );
+        } else {
+          // Show success message if no matches
+          Alert.alert(
+            'Interest Recorded! 🎉',
+            `You've shown interest in "${event.title}". We'll notify you if someone else is interested too!`,
+            [
+              { text: 'OK', style: 'default' }
+            ]
+          );
+        }
+      } catch (matchError) {
+        console.error('🧪 BallScreen: Error checking for matches:', matchError);
+        // Still show success message even if match check fails
+        Alert.alert(
+          'Interest Recorded! 🎉',
+          `You've shown interest in "${event.title}". We'll keep you updated about this ball event!`,
+          [
+            { text: 'OK', style: 'default' }
+          ]
+        );
+      }
+      
+    } catch (error) {
+      console.error('🧪 BallScreen: Error recording interest:', error);
+      Alert.alert('Error', 'Failed to record your interest. Please try again.');
+    } finally {
+      // Remove from loading state
+      setLoadingInterests(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(event.id);
+        return newSet;
+      });
+    }
   };
 
   if (isLoading) {
@@ -167,6 +394,17 @@ export const BallScreen: React.FC = () => {
 
         {/* Location Input Section */}
         <View style={styles.locationSection}>
+          {/* Country Selection */}
+          <View style={styles.countryContainer}>
+            <Text style={styles.countryLabel}>Select Country:</Text>
+            <CountryDropdown
+              selectedCountry={selectedCountry}
+              onCountryChange={setSelectedCountry}
+              style={styles.countryDropdown}
+            />
+          </View>
+
+          {/* Postal Code Input */}
           <View style={styles.postalCodeContainer}>
             <Ionicons name="location" size={20} color="#6A4C93" />
             <TextInput
@@ -175,9 +413,18 @@ export const BallScreen: React.FC = () => {
               placeholderTextColor="#999"
               value={postalCode}
               onChangeText={setPostalCode}
-              onEndEditing={() => setIsPostalCodeValid(postalCode.length >= 3)}
             />
           </View>
+
+          {/* Validation Message */}
+          {postalCode && (
+            <Text style={[
+              styles.validationText, 
+              isPostalCodeValid ? styles.validationTextValid : styles.validationTextInvalid
+            ]}>
+              {PostalCodeValidator.validatePostalCode(postalCode, selectedCountry).message}
+            </Text>
+          )}
 
           <View style={styles.locationButtons}>
             <TouchableOpacity style={styles.locationButton} onPress={handleUseMyLocation}>
@@ -264,54 +511,110 @@ export const BallScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        {/* AI-Generated Events Section */}
-        {showAiGeneratedEvents && (
+        {/* Formal Ball Events Section */}
+        {showFormalBallEvents && (
           <View style={styles.eventsSection}>
-            <Text style={styles.eventsTitle}>🎩 AI-Generated Formal Ball Events</Text>
+            <Text style={styles.eventsTitle}>🎩 Formal Ball Events Found</Text>
             
-            {aiGeneratedEvents.map((event) => (
-              <TouchableOpacity
-                key={event.id}
-                style={styles.eventCard}
-                onPress={() => handleEventPress(event)}
-              >
-                <View style={styles.eventHeader}>
-                  <Text style={styles.eventTitle}>{event.title}</Text>
-                  <Text style={styles.eventPrice}>{event.price}</Text>
-                </View>
-                
-                <View style={styles.eventDetails}>
-                  <Text style={styles.eventInstructor}>Instructor: {event.instructor}</Text>
-                  <Text style={styles.eventLocation}>📍 {event.location}</Text>
-                  <Text style={styles.eventDateTime}>
-                    📅 {event.date} at {event.time}
-                  </Text>
-                </View>
-                
-                <View style={styles.eventStyles}>
-                  {event.danceStyles.map((style, index) => (
-                    <View key={index} style={styles.styleTag}>
-                      <Text style={styles.styleTagText}>{style}</Text>
+            {formalBallEvents.length > 0 ? (
+              <FlatList
+                data={formalBallEvents}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.eventCard}
+                    onPress={() => handleEventPress(item)}
+                  >
+                    <View style={styles.eventHeader}>
+                      <Text style={styles.eventTitle}>{item.title}</Text>
+                      {item.price && (
+                        <Text style={styles.eventPrice}>{item.price}</Text>
+                      )}
                     </View>
-                  ))}
-                </View>
-                
-                <Text style={styles.eventDescription}>{event.description}</Text>
-              </TouchableOpacity>
-            ))}
+                    
+                    <View style={styles.eventDetails}>
+                      <Text style={styles.eventLocation}>📍 {item.location}</Text>
+                      {item.date && (
+                        <Text style={styles.eventDateTime}>
+                          📅 {item.date} {item.time && `at ${item.time}`}
+                        </Text>
+                      )}
+                    </View>
+                    
+                    <View style={styles.eventStyles}>
+                      {item.danceStyles.map((style, index) => (
+                        <View key={index} style={styles.styleTag}>
+                          <Text style={styles.styleTagText}>{style}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    
+                    <Text style={styles.eventDescription}>{item.description}</Text>
+                    
+                    {/* Event Actions */}
+                    <View style={styles.eventActions}>
+                      {/* I'm Interested Button */}
+                      <TouchableOpacity
+                        style={[
+                          styles.interestButton,
+                          userInterests.has(item.id) && styles.interestButtonActive,
+                          loadingInterests.has(item.id) && styles.interestButtonDisabled
+                        ]}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleInterestPress(item);
+                        }}
+                        disabled={loadingInterests.has(item.id)}
+                      >
+                        {loadingInterests.has(item.id) ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Ionicons 
+                            name={userInterests.has(item.id) ? "heart" : "heart-outline"} 
+                            size={16} 
+                            color="#fff" 
+                          />
+                        )}
+                        <Text style={styles.interestButtonText}>
+                          {loadingInterests.has(item.id) ? 'Saving...' : (userInterests.has(item.id) ? 'Interested' : "I'm Interested")}
+                        </Text>
+                      </TouchableOpacity>
+                      
+                      {/* Event Type Badge */}
+                      <View style={styles.eventTypeBadge}>
+                        <Text style={styles.eventTypeText}>
+                          {item.eventType.charAt(0).toUpperCase() + item.eventType.slice(1)} Ball
+                        </Text>
+                      </View>
+                    </View>
+                    
+                    <View style={styles.eventFooter}>
+                      <Text style={styles.eventSource}>via {item.source}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                keyExtractor={(item) => item.id}
+                showsVerticalScrollIndicator={false}
+                scrollEnabled={false}
+              />
+            ) : (
+              <View style={styles.noEventsContainer}>
+                <Text style={styles.noEventsText}>No formal ball events found in your area.</Text>
+                <Text style={styles.noEventsSubtext}>Try expanding your search or checking back later.</Text>
+              </View>
+            )}
 
             <TouchableOpacity style={styles.refreshButton} onPress={handleRefreshEvents}>
               <Ionicons name="refresh" size={18} color="#fff" />
-              <Text style={styles.refreshButtonText}>🔄 Refresh AI Events</Text>
+              <Text style={styles.refreshButtonText}>🔄 Refresh Events</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* Loading Indicator */}
-        {isGeneratingEvents && (
+        {isSearchingEvents && (
           <View style={styles.loadingSection}>
             <ActivityIndicator size="large" color="#fff" />
-            <Text style={styles.generatingText}>🎩 Generating AI formal ball events...</Text>
+            <Text style={styles.generatingText}>🎩 Searching for formal ball events...</Text>
           </View>
         )}
 
@@ -330,7 +633,7 @@ export const BallScreen: React.FC = () => {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Upgrade to Premium</Text>
             <Text style={styles.modalMessage}>
-              You've used all your free specialized searches. Upgrade to premium for unlimited access!
+              You&apos;ve used all your free specialized searches. Upgrade to premium for unlimited access!
             </Text>
             
             <TouchableOpacity
@@ -398,6 +701,18 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     backgroundColor: '#6A11CB',
   },
+  countryContainer: {
+    marginBottom: 16,
+  },
+  countryLabel: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  countryDropdown: {
+    marginBottom: 0,
+  },
   postalCodeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -412,6 +727,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     marginLeft: 12,
+  },
+  validationText: {
+    fontSize: 12,
+    marginTop: 8,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  validationTextValid: {
+    color: '#4CAF50',
+  },
+  validationTextInvalid: {
+    color: '#FF5722',
   },
   locationButtons: {
     flexDirection: 'row',
@@ -593,11 +920,6 @@ const styles = StyleSheet.create({
   eventDetails: {
     marginBottom: 12,
   },
-  eventInstructor: {
-    color: '#ccc',
-    fontSize: 14,
-    marginBottom: 4,
-  },
   eventLocation: {
     color: '#ccc',
     fontSize: 14,
@@ -607,6 +929,93 @@ const styles = StyleSheet.create({
     color: '#ccc',
     fontSize: 14,
     marginBottom: 8,
+  },
+  eventFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  eventActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  interestButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6A11CB',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flex: 1,
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    transform: [{ scale: 1 }],
+  },
+  interestButtonActive: {
+    backgroundColor: '#FF6B6B',
+    borderColor: '#FF4757',
+    transform: [{ scale: 1.05 }],
+    shadowColor: '#FF6B6B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  interestButtonDisabled: {
+    opacity: 0.6,
+  },
+  interestButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  eventTypeBadge: {
+    backgroundColor: 'rgba(255, 215, 0, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+  },
+  eventTypeText: {
+    color: '#FFD700',
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  eventType: {
+    color: '#FFD700',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  eventSource: {
+    color: '#999',
+    fontSize: 12,
+  },
+  noEventsContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  noEventsText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  noEventsSubtext: {
+    color: '#ccc',
+    fontSize: 14,
+    textAlign: 'center',
   },
   eventStyles: {
     flexDirection: 'row',

@@ -21,6 +21,8 @@ import {
     View,
 } from 'react-native';
 
+import { BackButton } from '../ui/BackButton';
+
 const { width, height } = Dimensions.get('window');
 
 const LoginScreen: React.FC = () => {
@@ -596,6 +598,4 @@ const styles = StyleSheet.create({
 });
 
 export default LoginScreen;
-
-import { BackButton } from '../ui/BackButton';
       <BackButton />

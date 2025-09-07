@@ -13,6 +13,8 @@ import {
     View
 } from 'react-native';
 
+import { BackButton } from '../ui/BackButton';
+
 export const TestAuthScreen: React.FC = () => {
   const [email, setEmail] = useState('test@example.com');
   const [password, setPassword] = useState('password123');
@@ -420,6 +422,4 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
-
-import { BackButton } from '../ui/BackButton';
       <BackButton />

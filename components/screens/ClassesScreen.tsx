@@ -14,6 +14,12 @@ import {
     View,
 } from 'react-native';
 
+import { eventInterestService } from '@/services/eventInterestService';
+import { googleCustomSearchClient } from '@/services/googleCustomSearchService';
+import { LocationData, locationService, PostalCodeValidator } from '@/services/locationService';
+import { matchDetectionService } from '@/services/matchDetectionService';
+import { CountryDropdown } from '../ui/CountryDropdown';
+
 // Mock data for dance classes - replace with real API calls later
 const mockDanceClasses = [
   {
@@ -130,55 +136,277 @@ export const ClassesScreen: React.FC = () => {
   const [videos, setVideos] = useState(mockVideoLessons);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<LocationData | null>(null);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  
+  // Interest tracking
+  const [userInterests, setUserInterests] = useState<Set<string>>(new Set());
+  const [loadingInterests, setLoadingInterests] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     // Simulate loading
     const timer = setTimeout(() => {
       setIsLoading(false);
     }, 500);
+    
+    if (user?.id) {
+      loadUserInterests();
+    }
+    
     return () => clearTimeout(timer);
-  }, []);
+  }, [user?.id]);
 
-  const handleUseMyLocation = () => {
-    Alert.alert(
-      'Use My Location',
-      'This would use your GPS location to find dance classes nearby.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Use Location',
-          onPress: () => {
-            setIsGeneratingEvents(true);
-            // Simulate AI event generation
-            setTimeout(() => {
-              setShowAiGeneratedEvents(true);
-              setIsGeneratingEvents(false);
-            }, 2000);
-          },
-        },
-      ]
-    );
+  // Load user's event interests from Firestore
+  const loadUserInterests = async () => {
+    try {
+      if (!user?.id) {
+        console.log('🧪 ClassesScreen: No user ID, skipping interest load');
+        return;
+      }
+      
+      console.log('🧪 ClassesScreen: Loading user interests from Firestore...');
+      const interests = await eventInterestService.getUserInterestedEvents(user.id);
+      const interestIds = new Set(interests.map(interest => interest.eventId));
+      
+      console.log('🧪 ClassesScreen: Loaded', interestIds.size, 'user interests from Firestore');
+      console.log('🧪 ClassesScreen: Interest IDs:', Array.from(interestIds));
+      
+      setUserInterests(interestIds);
+      
+      // Also save to localStorage as backup
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`userInterests_${user.id}`, JSON.stringify(Array.from(interestIds)));
+          console.log('🧪 ClassesScreen: Saved interests to localStorage as backup');
+        } catch (storageError) {
+          console.warn('🧪 ClassesScreen: Error saving to localStorage:', storageError);
+        }
+      }
+      
+    } catch (error) {
+      console.error('🧪 ClassesScreen: Error loading user interests from Firestore:', error);
+      
+      // Fallback: try to load from localStorage
+      if (typeof window !== 'undefined' && user?.id) {
+        try {
+          const cachedInterests = localStorage.getItem(`userInterests_${user.id}`);
+          if (cachedInterests) {
+            const interestIds = new Set(JSON.parse(cachedInterests));
+            setUserInterests(interestIds);
+            console.log('🧪 ClassesScreen: Loaded interests from localStorage fallback');
+          }
+        } catch (fallbackError) {
+          console.warn('🧪 ClassesScreen: Fallback localStorage load failed:', fallbackError);
+        }
+      }
+    }
   };
 
-  const handleSearchByCode = () => {
+  const handleUseMyLocation = async () => {
+    try {
+      setIsGettingLocation(true);
+      setSearchError(null);
+      
+      console.log('🧪 ClassesScreen: Getting user location...');
+      const location = await locationService.getCurrentLocation();
+      
+      setCurrentLocation(location);
+      console.log('🧪 ClassesScreen: Location obtained:', location);
+      
+      // Search for dance classes using Google Custom Search
+      await searchDanceClasses(location.locationName || `${location.latitude},${location.longitude}`);
+      
+    } catch (error) {
+      console.error('🧪 ClassesScreen: Location error:', error);
+      setSearchError('Failed to get your location. Please try again or use postal code search.');
+      Alert.alert('Location Error', 'Unable to get your current location. Please try using the postal code search instead.');
+    } finally {
+      setIsGettingLocation(false);
+    }
+  };
+
+  const handleSearchByCode = async () => {
     if (selectedCountry && postalCode && isPostalCodeValid) {
-      setIsGeneratingEvents(true);
-      // Simulate AI event generation
-      setTimeout(() => {
-        setShowAiGeneratedEvents(true);
+      try {
+        setIsGeneratingEvents(true);
+        setSearchError(null);
+        
+        console.log('🧪 ClassesScreen: Searching by postal code:', postalCode, selectedCountry);
+        
+        // Validate postal code format
+        const validation = PostalCodeValidator.validatePostalCode(postalCode, selectedCountry);
+        if (!validation.isValid) {
+          Alert.alert('Invalid Postal Code', validation.message);
+          setIsGeneratingEvents(false);
+          return;
+        }
+        
+        // Format postal code
+        const formattedCode = PostalCodeValidator.formatPostalCode(postalCode, selectedCountry);
+        const countryName = PostalCodeValidator.getSupportedCountries().find(c => c.code === selectedCountry)?.name || selectedCountry;
+        
+        // Search for dance classes using Google Custom Search
+        await searchDanceClasses(`${formattedCode}, ${countryName}`);
+        
+      } catch (error) {
+        console.error('🧪 ClassesScreen: Postal code search error:', error);
+        setSearchError('Failed to search for dance classes. Please try again.');
+        Alert.alert('Search Error', 'Unable to search for dance classes. Please try again.');
+      } finally {
         setIsGeneratingEvents(false);
-      }, 2000);
+      }
     } else {
       Alert.alert('Invalid Input', 'Please enter a valid postal code and select a country.');
     }
   };
 
+  // Main search function using Google Custom Search for dance classes
+  const searchDanceClasses = async (location: string) => {
+    try {
+      console.log('🧪 ClassesScreen: Searching for dance classes in:', location);
+      
+      // Build search query specifically for dance classes
+      const searchQuery = `dance classes lessons instruction ${location}`;
+      console.log('🧪 ClassesScreen: Search query:', searchQuery);
+      
+      // Use Google Custom Search to find dance class events
+      const results = await googleCustomSearchClient.searchDanceEvents(searchQuery, location, 10);
+      
+      console.log('🧪 ClassesScreen: Google search results:', results);
+      console.log('🧪 ClassesScreen: Number of results:', results?.length || 0);
+      
+      if (results && results.length > 0) {
+        console.log('🧪 ClassesScreen: Processing results...');
+        // Transform results to our event format
+        const transformedEvents = results.map((result: any, index: number) => ({
+          id: `google_${index}`,
+          title: result.title || 'Dance Class',
+          instructor: extractInstructor(result.snippet) || 'Professional Instructor',
+          location: extractLocation(result.snippet) || location,
+          date: extractDate(result.snippet) || 'Check website for schedule',
+          time: extractTime(result.snippet) || 'Various times available',
+          price: extractPrice(result.snippet) || 'Contact for pricing',
+          danceStyle: extractDanceStyle(result.title, result.snippet) || 'Various Styles',
+          description: result.snippet || 'Professional dance instruction available',
+          imageUrl: result.imageUrl || null,
+          source: 'Google Search',
+          url: result.url
+        }));
+        
+        console.log('🧪 ClassesScreen: Transformed events:', transformedEvents);
+        setSearchResults(transformedEvents);
+        setShowAiGeneratedEvents(true);
+        setSearchError(null);
+        
+        console.log('🧪 ClassesScreen: Found', transformedEvents.length, 'dance class events');
+      } else {
+        console.log('🧪 ClassesScreen: No results found');
+        setSearchError('No dance classes found in your area. Try expanding your search or checking nearby cities.');
+        setShowAiGeneratedEvents(false);
+      }
+      
+    } catch (error) {
+      console.error('🧪 ClassesScreen: Search error:', error);
+      setSearchError('Failed to search for dance classes. Please try again.');
+      setShowAiGeneratedEvents(false);
+    }
+  };
+
+  // Helper functions to extract information from search results
+  const extractInstructor = (snippet: string): string | null => {
+    const instructorPatterns = [
+      /instructor[:\s]+([A-Z][a-z]+ [A-Z][a-z]+)/i,
+      /taught by[:\s]+([A-Z][a-z]+ [A-Z][a-z]+)/i,
+      /with[:\s]+([A-Z][a-z]+ [A-Z][a-z]+)/i
+    ];
+    
+    for (const pattern of instructorPatterns) {
+      const match = snippet.match(pattern);
+      if (match) return match[1];
+    }
+    return null;
+  };
+
+  const extractLocation = (snippet: string): string | null => {
+    const locationPatterns = [
+      /at[:\s]+([A-Z][a-z\s]+(?:Studio|Academy|Center|Hall))/i,
+      /located[:\s]+([A-Z][a-z\s]+)/i,
+      /in[:\s]+([A-Z][a-z\s]+)/i
+    ];
+    
+    for (const pattern of locationPatterns) {
+      const match = snippet.match(pattern);
+      if (match) return match[1].trim();
+    }
+    return null;
+  };
+
+  const extractDate = (snippet: string): string | null => {
+    const datePatterns = [
+      /(?:every|on)[:\s]+([A-Z][a-z]+day)/i,
+      /(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
+      /(?:weekly|daily)/i
+    ];
+    
+    for (const pattern of datePatterns) {
+      const match = snippet.match(pattern);
+      if (match) return match[0];
+    }
+    return null;
+  };
+
+  const extractTime = (snippet: string): string | null => {
+    const timePatterns = [
+      /(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))/i,
+      /(\d{1,2}\s*(?:AM|PM|am|pm))/i,
+      /(?:at|from)[:\s]+(\d{1,2}:\d{2})/i
+    ];
+    
+    for (const pattern of timePatterns) {
+      const match = snippet.match(pattern);
+      if (match) return match[1];
+    }
+    return null;
+  };
+
+  const extractPrice = (snippet: string): string | null => {
+    const pricePatterns = [
+      /\$(\d+(?:\.\d{2})?)\s*(?:per|\/)\s*(?:class|lesson|session)/i,
+      /\$(\d+(?:\.\d{2})?)\s*(?:per|\/)\s*(?:hour|hr)/i,
+      /(\d+(?:\.\d{2})?)\s*(?:dollars?|USD)/i
+    ];
+    
+    for (const pattern of pricePatterns) {
+      const match = snippet.match(pattern);
+      if (match) return `$${match[1]}`;
+    }
+    return null;
+  };
+
+  const extractDanceStyle = (title: string, snippet: string): string | null => {
+    const text = `${title} ${snippet}`.toLowerCase();
+    const styles = ['salsa', 'bachata', 'tango', 'ballroom', 'swing', 'waltz', 'foxtrot', 'cha-cha', 'rumba', 'samba', 'hip hop', 'jazz', 'contemporary', 'ballet', 'latin', 'kizomba', 'west coast swing'];
+    
+    for (const style of styles) {
+      if (text.includes(style)) {
+        return style.charAt(0).toUpperCase() + style.slice(1);
+      }
+    }
+    return null;
+  };
+
   const handleRefreshEvents = () => {
-    setIsGeneratingEvents(true);
-    setTimeout(() => {
-      setIsGeneratingEvents(false);
-      Alert.alert('Refreshed', 'Dance class events have been refreshed!');
-    }, 1000);
+    if (currentLocation) {
+      searchDanceClasses(currentLocation.locationName || `${currentLocation.latitude},${currentLocation.longitude}`);
+    } else if (selectedCountry && postalCode) {
+      const formattedCode = PostalCodeValidator.formatPostalCode(postalCode, selectedCountry);
+      const countryName = PostalCodeValidator.getSupportedCountries().find(c => c.code === selectedCountry)?.name || selectedCountry;
+      searchDanceClasses(`${formattedCode}, ${countryName}`);
+    } else {
+      Alert.alert('No Search Criteria', 'Please use location or postal code search first.');
+    }
   };
 
   const handleEventPress = (event: any) => {
@@ -186,7 +414,7 @@ export const ClassesScreen: React.FC = () => {
   };
 
   const handleUpgradeToPremium = () => {
-    router.push('/(tabs)/premium');
+    router.push('/premium' as any);
   };
 
   const handleBookNow = (event: any) => {
@@ -207,15 +435,125 @@ export const ClassesScreen: React.FC = () => {
   };
 
   const handleVideoLibrary = () => {
-    router.push('/video_library');
+    router.push('/video_library' as any);
   };
 
   const handleVideoUpload = () => {
-    router.push('/video_upload');
+    router.push('/video_upload' as any);
   };
 
   const handleVideoDebug = () => {
-    router.push('/video_debug');
+    router.push('/video_debug' as any);
+  };
+
+  // Handle "I'm Interested" button press for classes
+  const handleInterestPress = async (event: any) => {
+    try {
+      if (!user) {
+        Alert.alert('Error', 'You must be logged in to show interest in classes.');
+        return;
+      }
+
+      console.log('🧪 ClassesScreen: User interested in class:', event.title);
+      
+      // IMMEDIATE STATE CHANGE - Update UI instantly for better UX
+      setUserInterests(prev => {
+        const newSet = new Set([...prev, event.id]);
+        console.log('🧪 ClassesScreen: Immediately updated userInterests set:', Array.from(newSet));
+        
+        // Also save to localStorage immediately for persistence
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`userInterests_${user.id}`, JSON.stringify(Array.from(newSet)));
+            console.log('🧪 ClassesScreen: Immediately saved to localStorage');
+          } catch (storageError) {
+            console.warn('🧪 ClassesScreen: Error saving to localStorage:', storageError);
+          }
+        }
+        
+        return newSet;
+      });
+      
+      // Add to loading state
+      setLoadingInterests(prev => new Set([...prev, event.id]));
+      
+      // Save user interest to Firestore (in background)
+      await eventInterestService.saveEventInterest(user.id, {
+        id: event.id,
+        title: event.title,
+        description: event.description,
+        location: event.location,
+        source: event.source || 'Google Search',
+        url: event.url,
+        startDate: new Date().toISOString(),
+        instructor: event.instructor || 'Unknown',
+        tags: ['dance', 'class']
+      });
+      
+      // Check for matches after saving interest
+      try {
+        const matchResult = await matchDetectionService.checkForMatchesImmediately(user.id, {
+          id: event.id,
+          title: event.title,
+          description: event.description,
+          location: event.location,
+          source: event.source || 'Google Search',
+          url: event.url,
+          startDate: new Date().toISOString(),
+          instructor: event.instructor || 'Unknown',
+          tags: ['dance', 'class']
+        });
+        
+        if (matchResult.newMatches.length > 0) {
+          console.log('🧪 ClassesScreen: Found new matches!', matchResult.newMatches.length);
+          
+          // Show match alert
+          Alert.alert(
+            '🎉 You Have a Match!',
+            `You matched with ${matchResult.newMatches[0].potentialPartner.name} for "${event.title}"! You both are interested in this class.`,
+            [
+              {
+                text: 'View Matches',
+                onPress: () => {
+                  router.push('/(tabs)/matches');
+                }
+              },
+              { text: 'OK', style: 'default' }
+            ]
+          );
+        } else {
+          // Show success message if no matches
+          Alert.alert(
+            'Interest Recorded! 🎉',
+            `You've shown interest in "${event.title}". We'll notify you if someone else is interested too!`,
+            [
+              { text: 'OK', style: 'default' }
+            ]
+          );
+        }
+      } catch (matchError) {
+        console.error('🧪 ClassesScreen: Error checking for matches:', matchError);
+        // Still show success message even if match check fails
+        Alert.alert(
+          'Interest Recorded! 🎉',
+          `You've shown interest in "${event.title}". We'll keep you updated about this class!`,
+          [
+            { text: 'OK', style: 'default' }
+          ]
+        );
+      }
+      
+    } catch (error) {
+      console.error('🧪 ClassesScreen: Error recording interest:', error);
+      Alert.alert('Error', 'Failed to record your interest. Please try again.');
+    } finally {
+      // Remove from loading state
+      setLoadingInterests(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(event.id);
+        return newSet;
+      });
+    }
   };
 
   if (isLoading) {
@@ -269,37 +607,69 @@ export const ClassesScreen: React.FC = () => {
 
         {/* Location Input Section */}
         <View style={styles.locationSection}>
+          <Text style={styles.locationSectionTitle}>📍 Find Dance Classes Near You</Text>
+          
+          {/* Country Selection */}
+          <View style={styles.countryContainer}>
+            <Text style={styles.inputLabel}>Select Country:</Text>
+            <CountryDropdown
+              selectedCountry={selectedCountry}
+              onCountryChange={setSelectedCountry}
+              style={styles.countryDropdown}
+            />
+          </View>
+
+          {/* Postal Code Input */}
           <View style={styles.postalCodeContainer}>
             <Ionicons name="location" size={20} color="#6A4C93" />
             <TextInput
               style={styles.postalCodeInput}
-              placeholder="Enter postal code"
+              placeholder={`Enter ${PostalCodeValidator.getSupportedCountries().find(c => c.code === selectedCountry)?.name || 'postal'} code`}
               placeholderTextColor="#999"
               value={postalCode}
-              onChangeText={setPostalCode}
-              onEndEditing={() => setIsPostalCodeValid(postalCode.length >= 3)}
+              onChangeText={(text) => {
+                setPostalCode(text);
+                const validation = PostalCodeValidator.validatePostalCode(text, selectedCountry);
+                setIsPostalCodeValid(validation.isValid);
+              }}
             />
           </View>
 
           <View style={styles.locationButtons}>
-            <TouchableOpacity style={styles.locationButton} onPress={handleUseMyLocation}>
+            <TouchableOpacity 
+              style={[styles.locationButton, isGettingLocation && styles.disabledButton]} 
+              onPress={handleUseMyLocation}
+              disabled={isGettingLocation}
+            >
               <Ionicons name="location" size={18} color="#fff" />
-              <Text style={styles.locationButtonText}>📍 Use My Location</Text>
+              <Text style={styles.locationButtonText}>
+                {isGettingLocation ? '📍 Getting Location...' : '📍 Use My Location'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
                 styles.locationButton,
                 styles.searchButton,
-                (!selectedCountry || !postalCode || !isPostalCodeValid) && styles.disabledButton
+                (!selectedCountry || !postalCode || !isPostalCodeValid || isGeneratingEvents) && styles.disabledButton
               ]}
               onPress={handleSearchByCode}
-              disabled={!selectedCountry || !postalCode || !isPostalCodeValid}
+              disabled={!selectedCountry || !postalCode || !isPostalCodeValid || isGeneratingEvents}
             >
               <Ionicons name="search" size={18} color="#fff" />
-              <Text style={styles.locationButtonText}>🔍 Search by Code</Text>
+              <Text style={styles.locationButtonText}>
+                {isGeneratingEvents ? '🔍 Searching...' : '🔍 Search by Code'}
+              </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Error Message */}
+          {searchError && (
+            <View style={styles.errorContainer}>
+              <Ionicons name="warning" size={16} color="#FF6B6B" />
+              <Text style={styles.errorText}>{searchError}</Text>
+            </View>
+          )}
         </View>
 
         {/* AI-Powered Upgrade Card */}
@@ -340,12 +710,15 @@ export const ClassesScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* AI-Generated Events Section */}
-        {showAiGeneratedEvents && (
+        {/* Search Results Section */}
+        {showAiGeneratedEvents && searchResults.length > 0 && (
           <View style={styles.eventsSection}>
-            <Text style={styles.eventsTitle}>💃 AI-Generated Dance Class Events</Text>
+            <Text style={styles.eventsTitle}>💃 Dance Classes Found Near You</Text>
+            <Text style={styles.eventsSubtitle}>
+              Found {searchResults.length} dance class{searchResults.length !== 1 ? 'es' : ''} using Google Search
+            </Text>
             
-            {aiGeneratedEvents.map((event) => (
+            {searchResults.map((event) => (
               <TouchableOpacity
                 key={event.id}
                 style={styles.eventCard}
@@ -368,24 +741,66 @@ export const ClassesScreen: React.FC = () => {
                   <View style={styles.styleTag}>
                     <Text style={styles.styleTagText}>{event.danceStyle}</Text>
                   </View>
+                  <View style={styles.sourceTag}>
+                    <Text style={styles.sourceTagText}>{event.source}</Text>
+                  </View>
                 </View>
                 
                 <Text style={styles.eventDescription}>{event.description}</Text>
+                
+                <View style={styles.eventActions}>
+                  {/* I'm Interested Button */}
+                  <TouchableOpacity
+                    style={[
+                      styles.interestButton,
+                      userInterests.has(event.id) && styles.interestButtonActive,
+                      loadingInterests.has(event.id) && styles.interestButtonDisabled
+                    ]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleInterestPress(event);
+                    }}
+                    disabled={loadingInterests.has(event.id)}
+                  >
+                    {loadingInterests.has(event.id) ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Ionicons 
+                        name={userInterests.has(event.id) ? "heart" : "heart-outline"} 
+                        size={16} 
+                        color="#fff" 
+                      />
+                    )}
+                    <Text style={styles.interestButtonText}>
+                      {loadingInterests.has(event.id) ? 'Saving...' : (userInterests.has(event.id) ? 'Interested' : "I'm Interested")}
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  {/* Visit Website Button */}
+                  {event.url && (
+                    <TouchableOpacity style={styles.visitWebsiteButton}>
+                      <Ionicons name="open-outline" size={16} color="#6A11CB" />
+                      <Text style={styles.visitWebsiteText}>Visit Website</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </TouchableOpacity>
             ))}
 
             <TouchableOpacity style={styles.refreshButton} onPress={handleRefreshEvents}>
               <Ionicons name="refresh" size={18} color="#fff" />
-              <Text style={styles.refreshButtonText}>🔄 Refresh AI Events</Text>
+              <Text style={styles.refreshButtonText}>🔄 Refresh Search Results</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* Loading Indicator */}
-        {isGeneratingEvents && (
+        {(isGeneratingEvents || isGettingLocation) && (
           <View style={styles.loadingSection}>
             <ActivityIndicator size="large" color="#fff" />
-            <Text style={styles.generatingText}>💃 Generating AI dance class events...</Text>
+            <Text style={styles.generatingText}>
+              {isGettingLocation ? '📍 Getting your location...' : '🔍 Searching for dance classes...'}
+            </Text>
             <View style={styles.progressBar}>
               <View style={styles.progressFill} />
             </View>
@@ -640,6 +1055,40 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     backgroundColor: '#6A11CB',
   },
+  locationSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  countryContainer: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    color: '#fff',
+    marginBottom: 8,
+    fontWeight: '600',
+  },
+  countryDropdown: {
+    marginBottom: 0,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 12,
+  },
+  errorText: {
+    color: '#FF6B6B',
+    fontSize: 12,
+    marginLeft: 8,
+    flex: 1,
+  },
   postalCodeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -782,7 +1231,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 18,
+    marginBottom: 8,
+  },
+  eventsSubtitle: {
+    color: '#ccc',
+    fontSize: 14,
     marginBottom: 16,
+    textAlign: 'center',
   },
   eventCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -842,6 +1297,75 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',
+  },
+  sourceTag: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginRight: 8,
+    marginBottom: 4,
+  },
+  sourceTagText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  visitWebsiteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(106, 17, 203, 0.2)',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#6A11CB',
+  },
+  visitWebsiteText: {
+    color: '#6A11CB',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  eventActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  interestButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6A11CB',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flex: 1,
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    transform: [{ scale: 1 }],
+  },
+  interestButtonActive: {
+    backgroundColor: '#FF6B6B',
+    borderColor: '#FF4757',
+    transform: [{ scale: 1.05 }],
+    shadowColor: '#FF6B6B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  interestButtonDisabled: {
+    opacity: 0.6,
+  },
+  interestButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
   },
   eventDescription: {
     color: '#ccc',
@@ -1106,6 +1630,3 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
-
-import { BackButton } from '../ui/BackButton';
-      <BackButton />

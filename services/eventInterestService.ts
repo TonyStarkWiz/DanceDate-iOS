@@ -1,16 +1,18 @@
-import { COLLECTIONS, db } from '@/config/firebase';
+import { COLLECTIONS, db, toDocId } from '@/config/firebase';
 import {
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    limit,
-    orderBy,
-    query,
-    serverTimestamp,
-    setDoc,
-    where
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  Unsubscribe,
+  where
 } from 'firebase/firestore';
 import { DisplayableEvent } from './danceEventsApi';
 
@@ -24,32 +26,50 @@ export interface EventInterest {
   eventSource: string;
   interestedAt: Date;
   eventData?: DisplayableEvent;
+  interested?: boolean; // Optional flag for easier queries/rules
 }
 
 class EventInterestService {
-  private collectionName = COLLECTIONS.EVENT_INTERESTS || 'event_interests';
+  // Use subcollection approach: users/{uid}/interested_events/{eventId}
+  // This matches the schema expected by our Firebase config helpers
+
+  /**
+   * 🎯 DETERMINISTIC EVENT KEY HELPER
+   * Ensures save/check/remove all use the exact same key
+   */
+  private eventKey(e: DisplayableEvent | string): string {
+    if (typeof e === 'string') return e;
+    
+    // Prefer a stable ID; fall back to another stable derivation
+    if ((e as any).eventId) return (e as any).eventId;
+    if (e.id) return e.id;
+    if ((e as any).url) return `url:${(e as any).url}`;
+    
+    // Last resort: stringify minimal identity
+    return `title:${e.title}`;
+  }
 
   // Save user interest in an event
   async saveEventInterest(userId: string, event: DisplayableEvent): Promise<void> {
     try {
-      console.log('🧪 EventInterestService: Saving interest for event:', event.title);
+      const key = this.eventKey(event);
+      console.log('🧪 EventInterestService: Saving interest', { userId, key, title: event.title });
       
-      const interestId = `${userId}_${event.id}`;
-      const interestData: Omit<EventInterest, 'id'> = {
-        userId,
-        eventId: event.id,
+      // Use subcollection approach: users/{uid}/interested_events/{eventId}
+      const interestRef = doc(db, COLLECTIONS.USERS, userId, 'interested_events', toDocId(key));
+      
+      const interestData = {
+        eventId: key,
         eventTitle: event.title,
         eventInstructor: event.instructor,
         eventLocation: event.location,
         eventSource: event.source,
-        interestedAt: new Date(),
-        eventData: event
+        eventData: event,
+        interested: true,
+        interestedAt: serverTimestamp()
       };
 
-      await setDoc(doc(db, this.collectionName, interestId), {
-        ...interestData,
-        interestedAt: serverTimestamp()
-      });
+      await setDoc(interestRef, interestData);
 
       console.log('🧪 EventInterestService: Interest saved successfully');
     } catch (error) {
@@ -59,12 +79,14 @@ class EventInterestService {
   }
 
   // Remove user interest in an event
-  async removeEventInterest(userId: string, eventId: string): Promise<void> {
+  async removeEventInterest(userId: string, eventIdOrEvent: string | DisplayableEvent): Promise<void> {
     try {
-      console.log('🧪 EventInterestService: Removing interest for event:', eventId);
+      const key = this.eventKey(eventIdOrEvent);
+      console.log('🧪 EventInterestService: Removing interest', { userId, key });
       
-      const interestId = `${userId}_${eventId}`;
-      await deleteDoc(doc(db, this.collectionName, interestId));
+      // Use subcollection approach: users/{uid}/interested_events/{eventId}
+      const interestRef = doc(db, COLLECTIONS.USERS, userId, 'interested_events', toDocId(key));
+      await deleteDoc(interestRef);
       
       console.log('🧪 EventInterestService: Interest removed successfully');
     } catch (error) {
@@ -74,15 +96,17 @@ class EventInterestService {
   }
 
   // Check if user is interested in an event
-  async isUserInterested(userId: string, eventId: string): Promise<boolean> {
+  async isUserInterested(userId: string, eventIdOrEvent: string | DisplayableEvent): Promise<boolean> {
     try {
-      console.log('🧪 EventInterestService: Checking if user is interested in event:', eventId);
+      const key = this.eventKey(eventIdOrEvent);
+      console.log('🧪 EventInterestService: Checking interest status', { userId, key });
       
-      const interestId = `${userId}_${eventId}`;
-      const interestDoc = await getDoc(doc(db, this.collectionName, interestId));
+      // Use subcollection approach: users/{uid}/interested_events/{eventId}
+      const interestRef = doc(db, COLLECTIONS.USERS, userId, 'interested_events', toDocId(key));
+      const interestDoc = await getDoc(interestRef);
       
       const isInterested = interestDoc.exists();
-      console.log('🧪 EventInterestService: User interest status:', isInterested);
+      console.log('🧪 EventInterestService: Interest status', { userId, key, isInterested });
       
       return isInterested;
     } catch (error) {
@@ -96,19 +120,19 @@ class EventInterestService {
     try {
       console.log('🧪 EventInterestService: Getting interested events for user:', userId);
       
+      // Use subcollection approach: users/{uid}/interested_events
       const interestsQuery = query(
-        collection(db, this.collectionName),
-        where('userId', '==', userId),
+        collection(db, COLLECTIONS.USERS, userId, 'interested_events'),
         orderBy('interestedAt', 'desc')
       );
       
       const snapshot = await getDocs(interestsQuery);
       const interests: EventInterest[] = [];
       
-      snapshot.forEach(doc => {
-        const data = doc.data();
+      snapshot.forEach(docSnapshot => {
+        const data = docSnapshot.data();
         interests.push({
-          id: doc.id,
+          id: docSnapshot.id,
           userId: data.userId,
           eventId: data.eventId,
           eventTitle: data.eventTitle,
@@ -116,7 +140,8 @@ class EventInterestService {
           eventLocation: data.eventLocation,
           eventSource: data.eventSource,
           interestedAt: data.interestedAt?.toDate() || new Date(),
-          eventData: data.eventData
+          eventData: data.eventData,
+          interested: data.interested
         });
       });
       
@@ -134,20 +159,21 @@ class EventInterestService {
       console.log('🧪 EventInterestService: Getting users interested in event:', eventId);
       
       const interestsQuery = query(
-        collection(db, this.collectionName),
+        collection(db, COLLECTIONS.EVENT_INTERESTS),
         where('eventId', '==', eventId)
       );
       
       const snapshot = await getDocs(interestsQuery);
-      const userIds: string[] = [];
+      const userIdSet = new Set<string>();
       
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        if (data.userId && data.userId !== userIds[userIds.length - 1]) {
-          userIds.push(data.userId);
+      snapshot.forEach(docSnapshot => {
+        const data = docSnapshot.data();
+        if (data.userId) {
+          userIdSet.add(data.userId);
         }
       });
       
+      const userIds = Array.from(userIdSet);
       console.log('🧪 EventInterestService: Found', userIds.length, 'users interested');
       return userIds;
     } catch (error) {
@@ -162,7 +188,7 @@ class EventInterestService {
       console.log('🧪 EventInterestService: Getting recent interests');
       
       const interestsQuery = query(
-        collection(db, this.collectionName),
+        collection(db, COLLECTIONS.EVENT_INTERESTS),
         orderBy('interestedAt', 'desc'),
         limit(limitCount)
       );
@@ -170,10 +196,10 @@ class EventInterestService {
       const snapshot = await getDocs(interestsQuery);
       const interests: EventInterest[] = [];
       
-      snapshot.forEach(doc => {
-        const data = doc.data();
+      snapshot.forEach(docSnapshot => {
+        const data = docSnapshot.data();
         interests.push({
-          id: doc.id,
+          id: docSnapshot.id,
           userId: data.userId,
           eventId: data.eventId,
           eventTitle: data.eventTitle,
@@ -181,7 +207,8 @@ class EventInterestService {
           eventLocation: data.eventLocation,
           eventSource: data.eventSource,
           interestedAt: data.interestedAt?.toDate() || new Date(),
-          eventData: data.eventData
+          eventData: data.eventData,
+          interested: data.interested
         });
       });
       
@@ -191,6 +218,34 @@ class EventInterestService {
       console.error('🧪 EventInterestService: Error getting recent interests:', error);
       return [];
     }
+  }
+
+  /**
+   * 🎯 REAL-TIME SUBSCRIPTION FOR BULLETPROOF UI STATE
+   * Subscribe to interest changes to keep UI in sync
+   */
+  watchUserInterest(
+    userId: string,
+    eventIdOrEvent: string | DisplayableEvent,
+    callback: (isInterested: boolean) => void,
+  ): Unsubscribe {
+    const key = this.eventKey(eventIdOrEvent);
+    const ref = doc(db, COLLECTIONS.USERS, userId, 'interested_events', toDocId(key));
+    
+    console.log('🧪 EventInterestService: Watching interest', { userId, key });
+    
+    return onSnapshot(
+      ref, 
+      (snap) => {
+        const isInterested = snap.exists();
+        console.log('🧪 EventInterestService: Interest changed', { userId, key, isInterested });
+        callback(isInterested);
+      }, 
+      (err) => {
+        console.error('🧪 EventInterestService: watchUserInterest error', err);
+        callback(false);
+      }
+    );
   }
 }
 

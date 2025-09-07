@@ -1,16 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  Linking,
-} from 'react-native';
+import { paymentService } from '@/services/paymentService';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Modal,
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
 
 interface PremiumPlan {
   id: string;
@@ -36,97 +36,49 @@ export const StripeElementsModal: React.FC<StripeElementsModalProps> = ({
   onError,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
-  const [checkoutUrl, setCheckoutUrl] = useState<string>('');
   const [paymentStep, setPaymentStep] = useState<'setup' | 'processing' | 'success' | 'error'>('setup');
   const [error, setError] = useState<string>('');
 
-  // Create Checkout Session when modal opens
+  // Process payment when modal opens
   useEffect(() => {
-    if (visible && !checkoutUrl) {
-      createCheckoutSession();
+    if (visible) {
+      // Reset state when modal opens
+      setPaymentStep('setup');
+      setError('');
     }
   }, [visible]);
 
-  const createCheckoutSession = async () => {
+  const handlePayment = async () => {
     try {
       setIsLoading(true);
-      console.log('🧪 Creating Stripe Checkout Session');
+      setPaymentStep('processing');
+      console.log('🧪 Starting payment for plan:', plan.id, 'on platform:', Platform.OS);
 
-      // Parse amount from plan price (e.g., "$14.99" -> 1499 cents)
-      const amountInCents = Math.round(parseFloat(plan.price.replace('$', '')) * 100);
+      const result = await paymentService.processPayment(plan.id, 'user@example.com');
       
-      // Create Checkout Session
-      const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer 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',
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          mode: 'subscription',
-          success_url: window.location.origin + '/payment-success?session_id={CHECKOUT_SESSION_ID}',
-          cancel_url: window.location.origin + '/payment-cancel',
-          'line_items[0][price]': plan.id === 'monthly' ? 'price_1S1owyBbx323AwXG6K38Xemb' : 'price_1S1oyZBbx323AwXGlCne4izj',
-          'line_items[0][quantity]': '1',
-          'metadata[userId]': 'current_user_id',
-          'metadata[purpose]': 'subscription_payment',
-          'metadata[created_at]': new Date().toISOString()
-        })
-      });
+      console.log('🧪 Payment result:', result);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `HTTP error! status: ${response.status}`);
-      }
-
-      const checkoutSession = await response.json();
-      console.log('🧪 Checkout Session created:', checkoutSession.id);
-      setCheckoutUrl(checkoutSession.url);
-
-    } catch (error) {
-      console.error('🧪 Error creating Checkout Session:', error);
-      setError(error instanceof Error ? error.message : 'Failed to initialize payment');
-      setPaymentStep('error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handlePayment = async () => {
-    if (!checkoutUrl) {
-      Alert.alert('Error', 'Payment system not ready. Please try again.');
-      return;
-    }
-
-    setPaymentStep('processing');
-
-    try {
-      console.log('🧪 Opening Stripe Checkout:', checkoutUrl);
-      
-      // Open Stripe Checkout in a new window/tab
-      const supported = await Linking.canOpenURL(checkoutUrl);
-      
-      if (supported) {
-        await Linking.openURL(checkoutUrl);
+      if (result.success) {
+        console.log('🧪 Payment successful');
+        setPaymentStep('success');
         
-        // For now, we'll simulate success since we can't easily track the redirect
-        // In a real app, you'd handle the success_url redirect
-        setTimeout(() => {
-          console.log('🧪 Payment completed via Checkout');
-          setPaymentStep('success');
-          
-          const paymentResult = {
-            id: 'cs_checkout_success',
-            amount: plan.price,
-            currency: 'usd',
-            plan: plan,
-            method: 'stripe_checkout'
-          };
+        const paymentResult = {
+          id: result.transactionId || 'payment_success',
+          amount: plan.price,
+          currency: 'usd',
+          plan: plan,
+          method: Platform.OS === 'ios' ? 'ios_iap' : 'stripe_checkout'
+        };
 
-          onSuccess(paymentResult);
-        }, 2000);
+        onSuccess(paymentResult);
       } else {
-        throw new Error('Cannot open payment URL');
+        console.error('🧪 Payment failed:', result.error);
+        setError(result.error || 'Payment failed');
+        setPaymentStep('error');
+        
+        if (onError) {
+          onError('payment', result.error || 'Payment failed');
+        }
       }
 
     } catch (error) {
@@ -137,23 +89,38 @@ export const StripeElementsModal: React.FC<StripeElementsModalProps> = ({
       if (onError) {
         onError('general', 'Payment failed. Please try again.');
       }
-      
-      Alert.alert('Payment Failed', 'There was an error processing your payment. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleRetry = () => {
     setPaymentStep('setup');
     setError('');
-    setCheckoutUrl('');
-    createCheckoutSession();
+    handlePayment();
   };
 
   const handleClose = () => {
-    setCheckoutUrl('');
     setPaymentStep('setup');
     setError('');
     onClose();
+  };
+
+  const getPaymentMethodName = () => {
+    return Platform.OS === 'ios' ? 'In-App Purchase' : 'Stripe Checkout';
+  };
+
+  const getSecurityText = () => {
+    return Platform.OS === 'ios' 
+      ? 'Your payment is secured by Apple' 
+      : 'Your payment information is secured by Stripe';
+  };
+
+  const getButtonText = () => {
+    if (isLoading) {
+      return 'Processing...';
+    }
+    return Platform.OS === 'ios' ? `Purchase ${plan.price}` : `Pay ${plan.price}`;
   };
 
   if (!visible) return null;
@@ -191,12 +158,7 @@ export const StripeElementsModal: React.FC<StripeElementsModalProps> = ({
 
           {/* Payment Container */}
           <View style={styles.paymentContainer}>
-            {isLoading && paymentStep === 'setup' ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#667eea" />
-                <Text style={styles.loadingText}>Setting up secure payment...</Text>
-              </View>
-            ) : paymentStep === 'processing' ? (
+            {isLoading && paymentStep === 'processing' ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#667eea" />
                 <Text style={styles.loadingText}>Processing payment...</Text>
@@ -220,23 +182,37 @@ export const StripeElementsModal: React.FC<StripeElementsModalProps> = ({
               <View style={styles.checkoutContainer}>
                 <Text style={styles.checkoutTitle}>Complete Your Payment</Text>
                 <Text style={styles.checkoutDescription}>
-                  You'll be redirected to Stripe's secure payment page to complete your subscription.
+                  {Platform.OS === 'ios' 
+                    ? 'This will use Apple\'s In-App Purchase system for App Store compliance.'
+                    : 'You\'ll be redirected to Stripe\'s secure payment page to complete your subscription.'
+                  }
                 </Text>
                 
                 <View style={styles.securityInfo}>
                   <Ionicons name="lock-closed" size={20} color="#4CAF50" />
                   <Text style={styles.securityText}>
-                    Your payment information is secured by Stripe
+                    {getSecurityText()}
+                  </Text>
+                </View>
+
+                <View style={styles.paymentMethodInfo}>
+                  <Ionicons 
+                    name={Platform.OS === 'ios' ? 'logo-apple' : 'card'} 
+                    size={24} 
+                    color="#667eea" 
+                  />
+                  <Text style={styles.paymentMethodText}>
+                    Payment Method: {getPaymentMethodName()}
                   </Text>
                 </View>
 
                 <TouchableOpacity 
                   style={styles.payButton} 
                   onPress={handlePayment}
-                  disabled={isLoading || !checkoutUrl}
+                  disabled={isLoading}
                 >
                   <Text style={styles.payButtonText}>
-                    {isLoading ? 'Setting up...' : `Pay ${plan.price}`}
+                    {getButtonText()}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -399,11 +375,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderRadius: 10,
-    marginBottom: 30,
+    marginBottom: 20,
   },
   securityText: {
     fontSize: 14,
     color: '#4CAF50',
+    marginLeft: 10,
+    fontWeight: '500',
+  },
+  paymentMethodInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f4ff',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderRadius: 10,
+    marginBottom: 30,
+  },
+  paymentMethodText: {
+    fontSize: 14,
+    color: '#667eea',
     marginLeft: 10,
     fontWeight: '500',
   },

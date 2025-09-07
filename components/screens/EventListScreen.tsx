@@ -1,23 +1,17 @@
-import { EventMatchModal } from '@/components/ui/EventMatchModal';
-import { NextStepsGuide } from '@/components/ui/NextStepsGuide';
+import { CountryDropdown } from '@/components/ui/CountryDropdown';
 import { PremiumUpgradePopup } from '@/components/ui/PremiumUpgradePopup';
 import { useAuth } from '@/contexts/AuthContext';
-import { useDeadEndPrevention } from '@/hooks/useDeadEndPrevention';
-import { aiAgentRepository } from '@/services/aiAgentRepository';
-import { DisplayableEvent } from '@/services/danceEventsApi';
-import { EventMatchSuggestion } from '@/services/eventBasedMatchingService';
 import { eventInterestService } from '@/services/eventInterestService';
-import { usageTracker } from '@/services/googleCustomSearchService';
+import { googleCustomSearchClient, GoogleSearchResult } from '@/services/googleCustomSearchService';
 import { LocationData, locationService, PostalCodeValidator } from '@/services/locationService';
 import { matchDetectionService } from '@/services/matchDetectionService';
-import { premiumUpgradeManager } from '@/services/premiumUpgradeManager';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     FlatList,
+    Pressable,
     RefreshControl,
     SafeAreaView,
     StyleSheet,
@@ -27,95 +21,64 @@ import {
     View,
 } from 'react-native';
 
-export const EventListScreen: React.FC = () => {
-  const { user } = useAuth();
-  const [events, setEvents] = useState<DisplayableEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [useLocation, setUseLocation] = useState(false);
-  const [userLocation, setUserLocation] = useState<LocationData | null>(null);
-  
-  // Premium status
-  const [isPremium, setIsPremium] = useState(false);
-  const [premiumLoading, setPremiumLoading] = useState(true);
-  
-  // Match modal state
-  const [showMatchModal, setShowMatchModal] = useState(false);
-  const [currentMatch, setCurrentMatch] = useState<EventMatchSuggestion | null>(null);
-  const [checkingForMatches, setCheckingForMatches] = useState(false);
-  
-  // Track user interests
-  const [userInterests, setUserInterests] = useState<Set<string>>(new Set());
-  const [loadingInterests, setLoadingInterests] = useState(false);
+// Simplified Event interface for dance events from Google Search
+interface DanceEvent {
+  id: string;
+  title: string;
+  description: string;
+  location: string;
+  source: string;
+  url?: string;
+  image?: string;
+}
 
+export const EventListScreen: React.FC = () => {
+  Alert.alert('🧪 EventListScreen', 'Component is mounting!');
+  
+  const { user } = useAuth();
+  const [events, setEvents] = useState<DanceEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Location state
+  const [userLocation, setUserLocation] = useState<LocationData | null>(null);
+  const [locationMethod, setLocationMethod] = useState<'none' | 'gps' | 'postal'>('none');
+  
   // Postal code search
   const [postalCode, setPostalCode] = useState('');
   const [selectedCountry, setSelectedCountry] = useState('US');
   const [postalCodeValid, setPostalCodeValid] = useState(false);
-  const [showPostalCodeInput, setShowPostalCodeInput] = useState(false);
-
-  // Usage tracking
-  const [usageStats, setUsageStats] = useState({
-    todayUsage: 0,
-    isPremium: false,
-    canSearch: true
-  });
-
-  // Dead End Prevention
-  const deadEndPrevention = useDeadEndPrevention({
-    currentScreen: 'eventList',
-    userInterests: Array.from(userInterests),
-    isPremium,
-    inactivityThreshold: 180000, // 3 minutes
-    enableAutoSuggestions: true
-  });
-
+  
+  // Search state
+  const [searchPerformed, setSearchPerformed] = useState(false);
+  
+  // Interest tracking
+  const [userInterests, setUserInterests] = useState<Set<string>>(new Set());
+  const [loadingInterests, setLoadingInterests] = useState<Set<string>>(new Set());
+  
+  // Premium status
+  const [isPremium, setIsPremium] = useState(false);
+  
   // Premium Upgrade Popup State
   const [showPremiumPopup, setShowPremiumPopup] = useState(false);
   const [premiumTriggerType, setPremiumTriggerType] = useState<string>('');
   const [premiumCountdown, setPremiumCountdown] = useState(300);
 
   useEffect(() => {
+    Alert.alert('🧪 useEffect 1', `User ID: ${user?.id || 'No user'}`);
     if (user?.id) {
-      loadEvents();
-      loadUserInterests();
       checkPremiumStatus();
-      loadUsageStats();
-    } else {
-      // If no user, still load sample events
-      loadEvents();
+      loadUserInterests();
     }
   }, [user?.id]);
 
-  // Check for premium upgrade popup triggers
+  // Also reload interests when events change to ensure sync
   useEffect(() => {
-    if (user?.id && !isPremium) {
-      const checkUpgrade = () => {
-        const lastActive = user?.lastActive ? new Date(user.lastActive).getTime() : Date.now();
-        const timeOnSite = Math.floor((Date.now() - lastActive) / 1000); // Convert to seconds
-        
-        const upgradeCheck = premiumUpgradeManager.shouldShowUpgrade(
-          user.id,
-          isPremium,
-          usageStats.todayUsage,
-          timeOnSite,
-          1 // page views
-        );
-
-        if (upgradeCheck.shouldShow) {
-          console.log('🧪 Premium popup should show:', upgradeCheck);
-          setPremiumTriggerType(upgradeCheck.triggerType);
-          setPremiumCountdown(upgradeCheck.countdownSeconds);
-          setShowPremiumPopup(true);
-          premiumUpgradeManager.recordPopupShown(user.id, upgradeCheck.triggerType);
-        }
-      };
-
-      // Check after a delay to ensure user is engaged
-      const timeout = setTimeout(checkUpgrade, 5000); // 5 seconds delay
-      return () => clearTimeout(timeout);
+    Alert.alert('🧪 useEffect 2', `Events length: ${events.length}, User: ${user?.id || 'No user'}`);
+    if (user?.id && events.length > 0) {
+      loadUserInterests();
     }
-  }, [user?.id, isPremium, usageStats.todayUsage]);
+  }, [events.length, user?.id]);
 
   // Validate postal code when it changes
   useEffect(() => {
@@ -127,94 +90,331 @@ export const EventListScreen: React.FC = () => {
     }
   }, [postalCode, selectedCountry]);
 
-  const loadEvents = async (useUserLocation: boolean = false, postalCodeData?: { code: string; country: string }) => {
+  // Load user's event interests from Firestore
+  const loadUserInterests = async () => {
     try {
-      setLoading(true);
-      
-      let location: LocationData | undefined;
-      
-      if (useUserLocation && userLocation) {
-        location = userLocation;
-      } else if (postalCodeData && postalCodeData.code) {
-        // Use postal code location
-        location = {
-          latitude: 27.6648, // Would be geocoded in real implementation
-          longitude: -81.5158,
-          locationName: `${postalCodeData.code}, ${postalCodeData.country}`,
-          country: postalCodeData.country
-        };
+      if (!user?.id) {
+        console.log('🧪 EventListScreen: No user ID, skipping interest load');
+        return;
       }
       
-      // Check usage limits
-      if (user?.id) {
-        const canSearch = await usageTracker.canPerformSearch(user.id, 'events');
-        if (!canSearch) {
-          Alert.alert(
-            'Search Limit Reached',
-            'You have reached your daily search limit. Upgrade to premium for unlimited searches.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Upgrade', onPress: () => router.push('/(tabs)/premium') }
-            ]
-          );
-          return;
+      console.log('🧪 EventListScreen: Loading user interests from Firestore...');
+      const interests = await eventInterestService.getUserInterestedEvents(user.id);
+      const interestIds = new Set(interests.map(interest => interest.eventId));
+      
+      console.log('🧪 EventListScreen: Loaded', interestIds.size, 'user interests from Firestore');
+      console.log('🧪 EventListScreen: Interest IDs:', Array.from(interestIds));
+      
+      setUserInterests(interestIds);
+      
+      // Also save to localStorage as backup
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`userInterests_${user.id}`, JSON.stringify(Array.from(interestIds)));
+          console.log('🧪 EventListScreen: Saved interests to localStorage as backup');
+        } catch (storageError) {
+          console.warn('🧪 EventListScreen: Error saving to localStorage:', storageError);
         }
       }
       
-      // Use AI Agent Repository for event discovery
-      const discoveryResult = await aiAgentRepository.discoverHighConversionEvents({
-        location,
-        screen: 'events',
-        maxResults: 20,
-        useGoogleSearch: true
-      });
+    } catch (error) {
+      console.error('🧪 EventListScreen: Error loading user interests from Firestore:', error);
       
-      setEvents(discoveryResult.events);
-      
-      // Track usage if user is logged in
-      if (user?.id) {
-        await usageTracker.trackSearchUsage(user.id, 'events');
-        loadUsageStats(); // Refresh usage stats
+      // Fallback: try to load from localStorage
+      if (typeof window !== 'undefined' && user?.id) {
+        try {
+          const cachedInterests = localStorage.getItem(`userInterests_${user.id}`);
+          if (cachedInterests) {
+            const interestIds = new Set<string>(JSON.parse(cachedInterests));
+            setUserInterests(interestIds);
+            console.log('🧪 EventListScreen: Loaded interests from localStorage fallback');
+          }
+        } catch (fallbackError) {
+          console.warn('🧪 EventListScreen: Fallback localStorage load failed:', fallbackError);
+        }
       }
+    }
+  };
+
+  // Transform Google Search results to our DanceEvent format
+  const transformSearchResults = (results: GoogleSearchResult[]): DanceEvent[] => {
+    return results.map((result, index) => ({
+      id: `${result.link}-${index}`,
+      title: result.title,
+      description: result.snippet,
+      location: 'Location from search result',
+      source: result.source,
+      url: result.link,
+      image: result.image
+    }));
+  };
+
+  // Handle "Use My Location" button press
+  const handleUseMyLocation = async () => {
+    try {
+      console.log('🧪 EventListScreen: Getting GPS location...');
+      setLoading(true);
+      
+      const location = await locationService.getCurrentLocation();
+      setUserLocation(location);
+      setLocationMethod('gps');
+      
+      // Search for dance events using GPS location
+      await searchDanceEvents(location);
+      
+      Alert.alert(
+        'Location Set',
+        `Using your location: ${location.locationName || `${location.latitude}, ${location.longitude}`}`,
+        [{ text: 'OK' }]
+      );
       
     } catch (error) {
-      console.error('Error loading events:', error);
-      
-      // Always show sample events as fallback
-      const sampleResult = await aiAgentRepository.getSampleEvents('events');
-      setEvents(sampleResult.events);
-      
-      Alert.alert('Info', 'Showing sample events. Real events will load when available.');
+      console.error('🧪 EventListScreen: GPS error:', error);
+      Alert.alert(
+        'Location Error', 
+        'Failed to get your location. Please try the postal code option instead.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const loadUserInterests = async () => {
+  // Handle postal code search
+  const handlePostalCodeSearch = async () => {
+    if (!postalCodeValid) {
+      Alert.alert(
+        'Invalid Postal Code', 
+        'Please enter a valid postal code for the selected country.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
     try {
-      setLoadingInterests(true);
+      console.log('🧪 EventListScreen: Searching by postal code:', postalCode, selectedCountry);
+      setLoading(true);
       
-      if (!user?.id) {
+      // Create location data from postal code (simplified - in real app would geocode)
+      const location: LocationData = {
+        latitude: 40.7128, // Would be geocoded from postal code
+        longitude: -74.0060,
+        locationName: `${postalCode}, ${selectedCountry}`,
+        postalCode: postalCode,
+        country: selectedCountry
+      };
+      
+      setUserLocation(location);
+      setLocationMethod('postal');
+      
+      // Search for dance events using postal code location
+      await searchDanceEvents(location);
+      
+    } catch (error) {
+      console.error('🧪 EventListScreen: Postal code search error:', error);
+      Alert.alert(
+        'Search Error',
+        'Failed to search events by postal code. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Main search function that calls Google Custom Search
+  const searchDanceEvents = async (location: LocationData) => {
+    try {
+      console.log('🧪 EventListScreen: Searching dance events for location:', location);
+      
+      const locationString = location.locationName || `${location.latitude}, ${location.longitude}`;
+      
+      // Use Google Custom Search to find dance events
+      const searchResults = await googleCustomSearchClient.searchDanceEvents(
+        'dance events classes lessons', 
+        locationString, 
+        20
+      );
+      
+      if (searchResults.length === 0) {
+        Alert.alert(
+          'No Events Found',
+          'No dance events found in this location. Try a different area or check back later.',
+          [{ text: 'OK' }]
+        );
+        setEvents([]);
+        return;
+      }
+      
+      // Transform and set events
+      const danceEvents = transformSearchResults(searchResults);
+      Alert.alert('🧪 Events Loaded', `Found ${danceEvents.length} events!`);
+      setEvents(danceEvents);
+      setSearchPerformed(true);
+      
+      console.log('🧪 EventListScreen: Found', danceEvents.length, 'dance events');
+      
+    } catch (error) {
+      console.error('🧪 EventListScreen: Search error:', error);
+      Alert.alert(
+        'Search Error',
+        'Failed to search for dance events. Please check your internet connection and try again.',
+        [{ text: 'OK' }]
+      );
+      setEvents([]);
+    }
+  };
+
+  // Handle "I'm Interested" button press
+  const handleInterestPress = async (event: DanceEvent) => {
+    Alert.alert('🧪 Interest Button Pressed!', `Event: ${event.title}\nID: ${event.id}`);
+    
+    try {
+      if (!user) {
+        Alert.alert('🧪 No User', 'You must be logged in to show interest in events.');
         return;
       }
 
-      const interests = await eventInterestService.getUserInterestedEvents(user.id);
-      const interestIds = new Set(interests.map(interest => interest.eventId));
+      Alert.alert('🧪 User Found', `User ID: ${user.id}`);
       
-      setUserInterests(interestIds);
+      // Test Firebase Auth directly
+      const { auth } = await import('@/config/firebase');
+      Alert.alert('🧪 Firebase Auth', `Current user: ${auth.currentUser?.uid || 'No Firebase user'}`);
+      
+      if (!auth.currentUser) {
+        Alert.alert('🧪 Auth Error', 'Firebase Auth user is null!');
+        return;
+      }
+      
+      console.log('🧪 EventListScreen: User interested in event:', event.title);
+      
+      // IMMEDIATE STATE CHANGE - Update UI instantly for better UX
+      setUserInterests(prev => {
+        const newSet = new Set([...prev, event.id]);
+        console.log('🧪 EventListScreen: Immediately updated userInterests set:', Array.from(newSet));
+        
+        // Also save to localStorage immediately for persistence
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`userInterests_${user.id}`, JSON.stringify(Array.from(newSet)));
+            console.log('🧪 EventListScreen: Immediately saved to localStorage');
+          } catch (storageError) {
+            console.warn('🧪 EventListScreen: Error saving to localStorage:', storageError);
+          }
+        }
+        
+        return newSet;
+      });
+      
+      // Add to loading state
+      setLoadingInterests(prev => new Set([...prev, event.id]));
+      
+      // Test Firestore connection first
+      try {
+        const { db } = await import('@/config/firebase');
+        const { doc } = await import('firebase/firestore');
+        const testDoc = doc(db, 'users', user.id);
+        Alert.alert('🧪 Firestore Test', `Testing write to: users/${user.id}/interested_events/test`);
+      } catch (firestoreTestError) {
+        Alert.alert('🧪 Firestore Error', `Firestore test failed: ${firestoreTestError}`);
+        return;
+      }
+      
+      // Save user interest to Firestore (in background) - with better error handling
+      try {
+        await eventInterestService.saveEventInterest(user.id, {
+          id: event.id,
+          title: event.title,
+          description: event.description,
+          location: event.location,
+          source: event.source as any,
+          url: event.url,
+          startDate: new Date().toISOString(), // Current date as placeholder
+          instructor: 'Unknown', // Placeholder
+          tags: ['dance'],
+          lat: 0, // Placeholder
+          lng: 0, // Placeholder
+          createdAt: new Date()
+        });
+        console.log('🧪 EventListScreen: Successfully saved interest to Firestore');
+      } catch (firestoreError) {
+        console.error('🧪 EventListScreen: Error saving to Firestore:', firestoreError);
+        // Don't revert UI state - keep the interest marked even if Firestore fails
+        // This ensures better UX - the user sees their action was registered
+      }
+      
+      // Check for matches after saving interest
+      try {
+        const matchResult = await matchDetectionService.checkForMatchesImmediately(user.id, {
+          id: event.id,
+          title: event.title,
+          description: event.description,
+          location: event.location,
+          source: event.source as any,
+          url: event.url,
+          startDate: new Date().toISOString(),
+          instructor: 'Unknown',
+          tags: ['dance'],
+          lat: 0, // Placeholder
+          lng: 0, // Placeholder
+          createdAt: new Date()
+        });
+        
+        if (matchResult.newMatches.length > 0) {
+          console.log('🧪 EventListScreen: Found new matches!', matchResult.newMatches.length);
+          
+          // Show match alert
+          Alert.alert(
+            '🎉 You Have a Match!',
+            `You matched with ${matchResult.newMatches[0].potentialPartner.name} for "${event.title}"! You both are interested in this event.`,
+            [
+              {
+                text: 'View Matches',
+                onPress: () => {
+                  // Navigate to matches screen
+                  console.log('🧪 Navigate to matches screen');
+                }
+              },
+              { text: 'OK', style: 'default' }
+            ]
+          );
+        } else {
+          // Show success message if no matches
+          Alert.alert(
+            'Interest Recorded! 🎉',
+            `You've shown interest in "${event.title}". We'll notify you if someone else is interested too!`,
+            [
+              { text: 'OK', style: 'default' }
+            ]
+          );
+        }
+      } catch (matchError) {
+        console.error('🧪 EventListScreen: Error checking for matches:', matchError);
+        // Still show success message even if match check fails
+        Alert.alert(
+          'Interest Recorded! 🎉',
+          `You've shown interest in "${event.title}". We'll keep you updated about this event!`,
+          [
+            { text: 'OK', style: 'default' }
+          ]
+        );
+      }
       
     } catch (error) {
-      console.error('Error loading user interests:', error);
-      // Fallback: set empty interests if there's an error
-      setUserInterests(new Set());
+      console.error('🧪 EventListScreen: Error recording interest:', error);
+      Alert.alert('Error', 'Failed to record your interest. Please try again.');
     } finally {
-      setLoadingInterests(false);
+      // Remove from loading state
+      setLoadingInterests(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(event.id);
+        return newSet;
+      });
     }
   };
 
   const checkPremiumStatus = async () => {
     try {
-      setPremiumLoading(true);
       console.log('🧪 EventListScreen: Checking premium status...');
       
       if (!user?.id) {
@@ -231,75 +431,52 @@ export const EventListScreen: React.FC = () => {
     } catch (error) {
       console.error('🧪 EventListScreen: Error checking premium status:', error);
       setIsPremium(false);
-    } finally {
-      setPremiumLoading(false);
-    }
-  };
-
-  const loadUsageStats = async () => {
-    try {
-      if (!user?.id) return;
-      
-      const stats = await usageTracker.getUsageStats(user.id, 'events');
-      setUsageStats(stats);
-      console.log('🧪 EventListScreen: Usage stats:', stats);
-      
-    } catch (error) {
-      console.error('🧪 EventListScreen: Error loading usage stats:', error);
     }
   };
 
   const onRefresh = async () => {
-    setRefreshing(true);
-    await loadEvents(useLocation);
-    await loadUserInterests();
-      setRefreshing(false);
-  };
-
-  const handleUseLocation = async () => {
-    try {
-      console.log('🧪 EventListScreen: Requesting GPS location...');
-      
-      const location = await locationService.getCurrentLocation();
-      setUserLocation(location);
-      setUseLocation(true);
-      setShowPostalCodeInput(false);
-      
+    if (locationMethod === 'none') {
       Alert.alert(
-        'Location Set',
-        `Using location: ${location.locationName || `${location.latitude}, ${location.longitude}`}`,
+        'No Location Set',
+        'Please select a location method first (GPS or postal code).',
         [{ text: 'OK' }]
       );
-      
-      await loadEvents(true);
-    } catch (error) {
-      console.error('🧪 EventListScreen: Error getting location:', error);
-      Alert.alert('Location Error', 'Failed to get your location. Please try again or use postal code search.');
-    }
-  };
-
-  const handlePostalCodeSearch = async () => {
-    if (!postalCodeValid) {
-      Alert.alert('Invalid Postal Code', 'Please enter a valid postal code for the selected country.');
       return;
     }
     
-    await loadEvents(false, { code: postalCode, country: selectedCountry });
-    setShowPostalCodeInput(false);
+    setRefreshing(true);
+    
+    // Reload both events and interests
+    const promises = [];
+    
+    if (userLocation) {
+      promises.push(searchDanceEvents(userLocation));
+    }
+    
+    if (user?.id) {
+      promises.push(loadUserInterests());
+    }
+    
+    await Promise.all(promises);
+    console.log('🧪 EventListScreen: Refresh completed - events and interests reloaded');
+    
+    setRefreshing(false);
   };
 
-  const handleEventPress = (event: DisplayableEvent) => {
-    console.log('🧪 EventListScreen: Event pressed:', event.title);
-    
+  // Handle event press
+  const handleEventPress = (event: DanceEvent) => {
     Alert.alert(
       event.title,
-      `${event.description || 'No description available'}\n\nInstructor: ${event.instructor}\nLocation: ${event.location}\nSource: ${event.source}`,
+      event.description,
       [
         {
-          text: 'View Details',
+          text: 'View Online',
           onPress: () => {
-            // Navigate to event detail screen
-            router.push(`/eventDetail/${event.title}/${event.instructor}/${event.location}`);
+            if (event.url) {
+              // In a real app, this would open the URL
+              console.log('🧪 Opening URL:', event.url);
+              Alert.alert('Info', 'This would open the event website in a browser.');
+            }
           }
         },
         { text: 'Cancel', style: 'cancel' }
@@ -307,100 +484,23 @@ export const EventListScreen: React.FC = () => {
     );
   };
 
-  const handleInterestPress = async (event: DisplayableEvent) => {
-    try {
-      console.log('🧪 EventListScreen: User interested in event:', event.title);
-      
-      if (!user) {
-        Alert.alert('Error', 'You must be logged in to show interest in events.');
-        return;
-      }
-      
-      // Save user interest to Firestore
-      await eventInterestService.saveEventInterest(user.id, event);
-      
-      // Update local state to reflect the interest
-      setUserInterests(prev => {
-        const newSet = new Set([...prev, event.id]);
-        console.log('🧪 EventListScreen: Updated userInterests set:', Array.from(newSet));
-        return newSet;
-      });
-      
-      // Check for matches after saving interest
-      setCheckingForMatches(true);
-      try {
-        const matchResult = await matchDetectionService.checkForMatchesImmediately(user.id, event);
-        
-        if (matchResult.newMatches.length > 0) {
-          console.log('🧪 EventListScreen: Found new matches!', matchResult.newMatches.length);
-          
-          // Show the first new match in the modal
-          setCurrentMatch(matchResult.newMatches[0]);
-          setShowMatchModal(true);
-        } else {
-          // Show success message if no matches
-          Alert.alert(
-            'Interest Recorded! 🎉',
-            `You've shown interest in "${event.title}". We'll keep you updated about this event!`,
-            [
-              { text: 'OK', style: 'default' }
-            ]
-          );
-        }
-      } catch (matchError) {
-        console.error('🧪 EventListScreen: Error checking for matches:', matchError);
-        // Still show success message even if match check fails
-        Alert.alert(
-          'Interest Recorded! 🎉',
-          `You've shown interest in "${event.title}". We'll keep you updated about this event!`,
-          [
-            { text: 'OK', style: 'default' }
-          ]
-        );
-      } finally {
-        setCheckingForMatches(false);
-      }
-      
-    } catch (error) {
-      console.error('🧪 EventListScreen: Error recording interest:', error);
-      
-      // Show specific error message based on error type
-      if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && error.message.includes('permissions')) {
-        Alert.alert(
-          'Permission Error', 
-          'Unable to save your interest due to permission issues. Please try logging out and back in.',
-          [{ text: 'OK' }]
-        );
-      } else {
-        Alert.alert('Error', 'Failed to record your interest. Please try again.');
-      }
-      
-      setCheckingForMatches(false);
-    }
+  // Reset search to start over
+  const resetSearch = () => {
+    setEvents([]);
+    setUserLocation(null);
+    setLocationMethod('none');
+    setSearchPerformed(false);
+    setPostalCode('');
+    setSelectedCountry('US');
+    setPostalCodeValid(false);
   };
 
-  // Modal handlers
-  const handleCloseModal = () => {
-    setShowMatchModal(false);
-    setCurrentMatch(null);
-  };
-
-  const handleViewProfile = (userId: string) => {
-    console.log('🧪 EventListScreen: Viewing profile for user:', userId);
-    router.push(`/partnerProfile/${userId}`);
-  };
-
-  const handleStartChat = (userId: string) => {
-    console.log('🧪 EventListScreen: Starting chat with user:', userId);
-    router.push('/chat');
-  };
-
-  const handleDismissMatch = () => {
-    // Could add logic here to mark this match as dismissed
-  };
-
-  const renderEventItem = ({ item: event }: { item: DisplayableEvent }) => {
+  // Render individual event item
+  const renderEventItem = ({ item: event }: { item: DanceEvent }) => {
+    Alert.alert('🧪 Rendering Event', `Title: ${event.title}\nID: ${event.id}`);
+    
     const isInterested = userInterests.has(event.id);
+    const isLoading = loadingInterests.has(event.id);
     
     return (
       <TouchableOpacity
@@ -415,58 +515,53 @@ export const EventListScreen: React.FC = () => {
           </View>
         </View>
         
-        <Text style={styles.eventInstructor}>by {event.instructor}</Text>
-        <Text style={styles.eventLocation}>📍 {event.location}</Text>
-        
-        {event.description && (
-          <Text style={styles.eventDescription} numberOfLines={2}>
-            {event.description}
-          </Text>
-        )}
-        
-        {event.tags && event.tags.length > 0 && (
-          <View style={styles.tagsContainer}>
-            {event.tags.slice(0, 3).map((tag, index) => (
-              <View key={index} style={styles.tag}>
-                <Text style={styles.tagText}>{tag}</Text>
-              </View>
-            ))}
-          </View>
-        )}
+        <Text style={styles.eventDescription} numberOfLines={3}>
+          {event.description}
+        </Text>
         
         <View style={styles.eventFooter}>
-          <Text style={styles.eventDate}>
-            {event.startDate ? new Date(event.startDate).toLocaleDateString() : 'Date TBD'}
-          </Text>
+          <Text style={styles.eventLocation}>📍 {event.location}</Text>
+          
           <View style={styles.eventActions}>
-            <TouchableOpacity 
-              style={[styles.interestButton, checkingForMatches && styles.interestButtonDisabled]}
+            {/* I'm Interested Button */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.interestButton,
+                isInterested && styles.interestButtonActive,
+                isLoading && styles.interestButtonDisabled,
+                pressed && { opacity: 0.7 },
+                { position: 'relative', zIndex: 2 }
+              ]}
               onPress={(e) => {
-                e.stopPropagation();
+                if (e?.stopPropagation) e.stopPropagation();
+                Alert.alert('🧪 Button Click Detected', `Event: ${event.title}`);
                 handleInterestPress(event);
               }}
-              disabled={checkingForMatches}
+              disabled={isLoading}
+              accessibilityRole="button"
+              hitSlop={12}
             >
-              {checkingForMatches ? (
+              {isLoading ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <Ionicons 
-                  name={userInterests.has(event.id) ? "heart" : "heart-outline"} 
+                  name={isInterested ? "heart" : "heart-outline"} 
                   size={16} 
                   color="#fff" 
                 />
               )}
               <Text style={styles.interestButtonText}>
-                {checkingForMatches ? 'Checking...' : (userInterests.has(event.id) ? 'Interested' : 'I\'m Interested')}
+                {isLoading ? 'Saving...' : (isInterested ? 'Interested' : "I'm Interested")}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
+            
+            {/* View Event Button */}
             {event.url && (
               <TouchableOpacity 
                 style={styles.linkButton}
                 onPress={(e) => {
                   e.stopPropagation();
-                  // Handle external link
-                  Alert.alert('External Link', 'This would open the event website in a browser.');
+                  handleEventPress(event);
                 }}
               >
                 <Ionicons name="link-outline" size={16} color="#6A11CB" />
@@ -479,46 +574,99 @@ export const EventListScreen: React.FC = () => {
     );
   };
 
+  // Render empty state when no location is selected
+  const renderLocationPrompt = () => (
+    <View style={styles.locationPromptContainer}>
+      <Ionicons name="location-outline" size={80} color="#6A11CB" />
+      <Text style={styles.locationPromptTitle}>Find Dance Events</Text>
+      <Text style={styles.locationPromptSubtitle}>
+        Choose how you'd like to search for dance events in your area:
+      </Text>
+      
+      <TouchableOpacity 
+        style={styles.locationButton}
+        onPress={handleUseMyLocation}
+        disabled={loading}
+      >
+        {loading && locationMethod === 'gps' ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Ionicons name="navigate" size={20} color="#fff" />
+        )}
+        <Text style={styles.locationButtonText}>
+          {loading && locationMethod === 'gps' ? 'Getting Location...' : 'Use My Location'}
+        </Text>
+      </TouchableOpacity>
+      
+      <Text style={styles.orText}>OR</Text>
+      
+      <View style={styles.postalCodeSection}>
+        <Text style={styles.postalCodeLabel}>Enter your postal code:</Text>
+        
+        <View style={styles.postalCodeRow}>
+          <CountryDropdown
+            selectedCountry={selectedCountry}
+            onCountryChange={setSelectedCountry}
+            style={styles.countryDropdown}
+          />
+          
+          <TextInput
+            style={[styles.postalCodeInput, postalCodeValid && styles.postalCodeInputValid]}
+            placeholder="Postal code"
+            value={postalCode}
+            onChangeText={setPostalCode}
+            placeholderTextColor="rgba(255, 255, 255, 0.6)"
+          />
+        </View>
+        
+        {postalCode && (
+          <Text style={[styles.validationText, postalCodeValid ? styles.validationTextValid : styles.validationTextInvalid]}>
+            {PostalCodeValidator.validatePostalCode(postalCode, selectedCountry).message}
+          </Text>
+        )}
+        
+        <TouchableOpacity
+          style={[styles.searchButton, (!postalCodeValid || loading) && styles.searchButtonDisabled]}
+          onPress={handlePostalCodeSearch}
+          disabled={!postalCodeValid || loading}
+        >
+          {loading && locationMethod === 'postal' ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name="search" size={20} color="#fff" />
+          )}
+          <Text style={styles.searchButtonText}>
+            {loading && locationMethod === 'postal' ? 'Searching...' : 'Search Events'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  // Render empty state when no events found
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <Ionicons name="calendar-outline" size={80} color="#6A11CB" />
-      <Text style={styles.emptyTitle}>No Events Found</Text>
+      <Text style={styles.emptyTitle}>No Dance Events Found</Text>
       <Text style={styles.emptySubtitle}>
-        {useLocation 
-          ? 'No dance events found in your area. Try expanding your search radius or check back later.'
-          : 'No dance events available at the moment. The AI search might be temporarily unavailable.'
-        }
+        No dance events found in this location. Try a different area or check back later.
       </Text>
-      {!useLocation && !showPostalCodeInput && (
-        <TouchableOpacity style={styles.locationButton} onPress={handleUseLocation}>
-          <Ionicons name="location-outline" size={20} color="#fff" />
-          <Text style={styles.locationButtonText}>Use My Location</Text>
-        </TouchableOpacity>
-      )}
-      <TouchableOpacity style={styles.refreshButton} onPress={async () => {
-        try {
-          setLoading(true);
-          await loadEvents(useLocation);
-          console.log('🧪 EventListScreen: Refreshed events');
-        } catch (error) {
-          console.error('🧪 EventListScreen: Error refreshing:', error);
-          Alert.alert('Error', 'Failed to refresh events');
-        } finally {
-          setLoading(false);
-        }
-      }}>
+      <TouchableOpacity style={styles.resetButton} onPress={resetSearch}>
         <Ionicons name="refresh-outline" size={20} color="#fff" />
-        <Text style={styles.refreshButtonText}>Refresh Events</Text>
+        <Text style={styles.resetButtonText}>Try Different Location</Text>
       </TouchableOpacity>
     </View>
   );
 
+  // Main render method
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6A11CB" />
-          <Text style={styles.loadingText}>Finding dance events with AI...</Text>
+          <Text style={styles.loadingText}>
+            {locationMethod === 'gps' ? 'Getting your location...' : 'Searching dance events...'}
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -529,192 +677,57 @@ export const EventListScreen: React.FC = () => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Dance Events</Text>
-        <Text style={styles.subtitle}>
-          {events.length} event{events.length !== 1 ? 's' : ''} found
-          {useLocation && userLocation ? ' near you' : ''}
-        </Text>
+        {searchPerformed && (
+          <Text style={styles.subtitle}>
+            {events.length} event{events.length !== 1 ? 's' : ''} found
+            {userLocation && ` near ${userLocation.locationName || 'your location'}`}
+          </Text>
+        )}
         
-
-        {/* Usage Stats */}
-        {user?.id && (
-          <View style={styles.usageStats}>
-            <Text style={styles.usageText}>
-              Searches today: {usageStats.todayUsage}/5
-            </Text>
-            {!usageStats.canSearch && (
-              <Text style={styles.usageWarning}>
-                Daily limit reached. Upgrade for unlimited searches.
-              </Text>
-            )}
-          </View>
+        {searchPerformed && (
+          <TouchableOpacity 
+            style={styles.resetLocationButton}
+            onPress={resetSearch}
+          >
+            <Ionicons name="location-outline" size={16} color="#6A11CB" />
+            <Text style={styles.resetLocationText}>Change Location</Text>
+          </TouchableOpacity>
         )}
       </View>
 
-      {/* Action Buttons */}
-      <View style={styles.actionButtons}>
-        <TouchableOpacity
-          style={[styles.actionButton, useLocation && styles.actionButtonActive]}
-          onPress={handleUseLocation}
-        >
-          <Ionicons name="location-outline" size={20} color={useLocation ? '#fff' : '#6A11CB'} />
-          <Text style={[styles.actionButtonText, useLocation && styles.actionButtonTextActive]}>
-            {useLocation ? 'Using GPS' : 'Use GPS'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionButton, showPostalCodeInput && styles.actionButtonActive]}
-          onPress={() => setShowPostalCodeInput(!showPostalCodeInput)}
-        >
-          <Ionicons name="search-outline" size={20} color={showPostalCodeInput ? '#fff' : '#6A11CB'} />
-          <Text style={[styles.actionButtonText, showPostalCodeInput && styles.actionButtonTextActive]}>
-            {showPostalCodeInput ? 'Postal Code' : 'Postal Code'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => loadEvents(false)}
-        >
-          <Ionicons name="refresh-outline" size={20} color="#6A11CB" />
-          <Text style={styles.actionButtonText}>Refresh</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionButton, deadEndPrevention.isUserStuck && styles.actionButtonUrgent]}
-          onPress={deadEndPrevention.forceSuggestNextAction}
-        >
-          <Ionicons name="compass" size={20} color={deadEndPrevention.isUserStuck ? "#FF6B6B" : "#6A11CB"} />
-          <Text style={[styles.actionButtonText, deadEndPrevention.isUserStuck && styles.actionButtonTextUrgent]}>
-            {deadEndPrevention.isUserStuck ? 'Help!' : 'Guide'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionButton, isPremium && styles.premiumButtonActive]}
-          onPress={() => {
-            if (isPremium) {
-              router.push('/(tabs)/premium');
-            } else {
-              setPremiumTriggerType('promotional');
-              setPremiumCountdown(300);
-              setShowPremiumPopup(true);
-              if (user?.id) {
-                premiumUpgradeManager.recordPopupShown(user.id, 'promotional');
-              }
+      {/* Content */}
+      {!searchPerformed ? (
+        renderLocationPrompt()
+      ) : events.length === 0 ? (
+        renderEmptyState()
+      ) : (
+        <>
+          {Alert.alert('🧪 About to Render FlatList', `Events count: ${events.length}`)}
+          <FlatList
+            data={events}
+            renderItem={renderEventItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#6A11CB']}
+                tintColor="#6A11CB"
+              />
             }
-          }}
-        >
-          <Ionicons 
-            name={isPremium ? "diamond" : "diamond-outline"} 
-            size={20} 
-            color={isPremium ? "#FFD700" : "#6A11CB"} 
           />
-          <Text style={[styles.actionButtonText, isPremium && styles.premiumButtonTextActive]}>
-            {isPremium ? 'Premium' : 'Upgrade'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Postal Code Input */}
-      {showPostalCodeInput && (
-        <View style={styles.postalCodeContainer}>
-          <View style={styles.postalCodeRow}>
-          <TextInput
-              style={[styles.postalCodeInput, postalCodeValid && styles.postalCodeInputValid]}
-              placeholder="Enter postal code"
-              value={postalCode}
-              onChangeText={setPostalCode}
-              placeholderTextColor="#999"
-            />
-            <TouchableOpacity
-              style={[styles.countryButton, selectedCountry === 'US' && styles.countryButtonActive]}
-              onPress={() => setSelectedCountry('US')}
-            >
-              <Text style={[styles.countryButtonText, selectedCountry === 'US' && styles.countryButtonTextActive]}>
-                US
-              </Text>
-            </TouchableOpacity>
-              <TouchableOpacity
-              style={[styles.countryButton, selectedCountry === 'UK' && styles.countryButtonActive]}
-              onPress={() => setSelectedCountry('UK')}
-              >
-              <Text style={[styles.countryButtonText, selectedCountry === 'UK' && styles.countryButtonTextActive]}>
-                UK
-              </Text>
-              </TouchableOpacity>
-              </View>
-          {postalCode && (
-            <Text style={[styles.validationText, postalCodeValid ? styles.validationTextValid : styles.validationTextInvalid]}>
-              {PostalCodeValidator.validatePostalCode(postalCode, selectedCountry).message}
-            </Text>
-          )}
-              <TouchableOpacity
-            style={[styles.searchButton, !postalCodeValid && styles.searchButtonDisabled]}
-            onPress={handlePostalCodeSearch}
-            disabled={!postalCodeValid}
-              >
-            <Ionicons name="search" size={20} color="#fff" />
-            <Text style={styles.searchButtonText}>Search by Code</Text>
-              </TouchableOpacity>
-        </View>
+        </>
       )}
-
-      {/* Events List */}
-      <FlatList
-        data={events}
-        renderItem={renderEventItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={['#6A11CB']}
-            tintColor="#6A11CB"
-          />
-        }
-        ListEmptyComponent={renderEmptyState}
-      />
-
-      {/* Next Steps Guide - Prevents Dead Ends */}
-      <NextStepsGuide
-        currentScreen="eventList"
-        userInterests={Array.from(userInterests)}
-        isPremium={isPremium}
-        showTitle={true}
-        maxSuggestions={3}
-      />
-      
-      {/* Match Modal */}
-      <EventMatchModal
-        visible={showMatchModal}
-        match={currentMatch}
-        onClose={handleCloseModal}
-        onViewProfile={handleViewProfile}
-        onStartChat={handleStartChat}
-        onDismiss={handleDismissMatch}
-      />
 
       {/* Premium Upgrade Popup */}
       <PremiumUpgradePopup
         visible={showPremiumPopup}
-        onClose={() => {
-          setShowPremiumPopup(false);
-          if (user?.id && premiumTriggerType) {
-            premiumUpgradeManager.recordPopupDismissed(user.id, premiumTriggerType);
-          }
-        }}
+        onClose={() => setShowPremiumPopup(false)}
         onSuccess={() => {
           setShowPremiumPopup(false);
-          if (user?.id && premiumTriggerType) {
-            premiumUpgradeManager.recordConversion(user.id, premiumTriggerType);
-          }
-          // Refresh premium status
           checkPremiumStatus();
-          // Reload events to show premium features
-          loadEvents();
         }}
         triggerType={premiumTriggerType as any}
         countdownSeconds={premiumCountdown}
@@ -727,7 +740,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#4A148C',
-    width: '100%', // Ensure full width
   },
   header: {
     alignItems: 'center',
@@ -735,50 +747,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 5,
-    textAlign: 'center',
-    paddingHorizontal: 16,
   },
   subtitle: {
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
-    paddingHorizontal: 16,
+    marginBottom: 10,
   },
-  actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 16,
-    paddingBottom: 20,
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  actionButton: {
+  resetLocationButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    minWidth: 120, // Ensure minimum width for touch targets
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    marginTop: 8,
   },
-  actionButtonActive: {
-    backgroundColor: '#6A11CB',
-    borderColor: '#6A11CB',
-  },
-  actionButtonText: {
+  resetLocationText: {
     color: '#6A11CB',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    marginLeft: 8,
-  },
-  actionButtonTextActive: {
-    color: '#fff',
+    marginLeft: 4,
   },
   loadingContainer: {
     flex: 1,
@@ -789,34 +782,39 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     marginTop: 20,
+    textAlign: 'center',
   },
-  emptyContainer: {
+  locationPromptContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: 20,
   },
-  emptyTitle: {
+  locationPromptTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
     marginTop: 20,
     marginBottom: 10,
+    textAlign: 'center',
   },
-  emptySubtitle: {
+  locationPromptSubtitle: {
     fontSize: 16,
     color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
     lineHeight: 24,
-    marginBottom: 30,
+    marginBottom: 40,
   },
   locationButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#6A11CB',
-    paddingHorizontal: 25,
+    paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 25,
+    marginBottom: 20,
+    minWidth: 200,
+    justifyContent: 'center',
   },
   locationButtonText: {
     color: '#fff',
@@ -824,16 +822,71 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
   },
-  refreshButton: {
+  orText: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 16,
+    fontWeight: '600',
+    marginVertical: 20,
+  },
+  postalCodeSection: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  postalCodeLabel: {
+    color: '#fff',
+    fontSize: 16,
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  postalCodeRow: {
+    flexDirection: 'row',
+    width: '100%',
+    marginBottom: 10,
+    gap: 10,
+  },
+  countryDropdown: {
+    flex: 1,
+  },
+  postalCodeInput: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderRadius: 12,
+    fontSize: 16,
+    color: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  postalCodeInputValid: {
+    borderColor: '#4CAF50',
+    borderWidth: 2,
+  },
+  validationText: {
+    fontSize: 12,
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  validationTextValid: {
+    color: '#4CAF50',
+  },
+  validationTextInvalid: {
+    color: '#FF6B6B',
+  },
+  searchButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 25,
+    backgroundColor: '#6A11CB',
+    paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 25,
-    marginTop: 15,
+    minWidth: 200,
+    justifyContent: 'center',
   },
-  refreshButtonText: {
+  searchButtonDisabled: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  searchButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
@@ -848,14 +901,12 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 16,
     marginBottom: 15,
-    marginHorizontal: 4, // Add small horizontal margin to prevent edge cutoff
   },
   eventHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 8,
-    flexWrap: 'wrap',
   },
   eventTitle: {
     fontSize: 16,
@@ -863,7 +914,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     flex: 1,
     marginRight: 8,
-    minWidth: 0, // Allows text to wrap properly
   },
   sourceBadge: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -877,65 +927,52 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'uppercase',
   },
-  eventInstructor: {
-    fontSize: 14,
-    color: '#6A11CB',
-    fontWeight: '600',
-    marginBottom: 5,
-  },
-  eventLocation: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginBottom: 10,
-  },
   eventDescription: {
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.7)',
     lineHeight: 20,
     marginBottom: 15,
   },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 15,
-  },
-  tag: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    marginRight: 8,
-    marginBottom: 5,
-  },
-  tagText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '500',
-  },
   eventFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     flexWrap: 'wrap',
-    marginTop: 8,
+    gap: 8,
   },
-  eventDate: {
+  eventLocation: {
     fontSize: 12,
     color: 'rgba(255, 255, 255, 0.6)',
+    flex: 1,
   },
   eventActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flexWrap: 'wrap',
   },
   interestButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#6A11CB',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    transform: [{ scale: 1 }],
+  },
+  interestButtonActive: {
+    backgroundColor: '#FF6B6B',
+    borderColor: '#FF4757',
+    transform: [{ scale: 1.05 }],
+    shadowColor: '#FF6B6B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  interestButtonDisabled: {
+    opacity: 0.6,
   },
   interestButtonText: {
     color: '#fff',
@@ -943,45 +980,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 4,
   },
-  premiumStatus: {
+  linkButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-    marginTop: 8,
-  },
-  premiumText: {
-    color: '#999',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  premiumTextActive: {
-    color: '#FFD700',
-  },
-  premiumSubtext: {
-    color: '#FFD700',
-    fontSize: 10,
-    fontWeight: '500',
-    marginLeft: 8,
-    fontStyle: 'italic',
-  },
-  premiumButtonActive: {
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-    borderColor: '#FFD700',
-    borderWidth: 1,
-  },
-  premiumButtonTextActive: {
-    color: '#FFD700',
-  },
-  interestButtonDisabled: {
-    opacity: 0.6,
-  },
-  linkButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 20,
   },
   linkText: {
     color: '#6A11CB',
@@ -989,96 +994,39 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 4,
   },
-  usageStats: {
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  usageText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 12,
-  },
-  usageWarning: {
-    color: '#FF6B6B',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  postalCodeContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    marginHorizontal: 20,
-    marginBottom: 20,
-    padding: 15,
-    borderRadius: 15,
-  },
-  postalCodeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  postalCodeInput: {
+  emptyContainer: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    borderRadius: 10,
-    marginRight: 10,
-    fontSize: 16,
-    color: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
   },
-  postalCodeInputValid: {
-    borderColor: '#4CAF50',
-    borderWidth: 2,
-  },
-  countryButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    marginRight: 8,
-  },
-  countryButtonActive: {
-    backgroundColor: '#6A11CB',
-  },
-  countryButtonText: {
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
     color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  countryButtonTextActive: {
-    color: '#fff',
-  },
-  validationText: {
-    fontSize: 12,
+    marginTop: 20,
     marginBottom: 10,
+    textAlign: 'center',
   },
-  validationTextValid: {
-    color: '#4CAF50',
+  emptySubtitle: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 30,
   },
-  validationTextInvalid: {
-    color: '#FF6B6B',
-  },
-  searchButton: {
+  resetButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: '#6A11CB',
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: 25,
+    paddingVertical: 15,
+    borderRadius: 25,
   },
-  searchButtonDisabled: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  searchButtonText: {
+  resetButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
-  },
-  actionButtonUrgent: {
-    backgroundColor: '#FF6B6B',
-    borderColor: '#FF6B6B',
-  },
-  actionButtonTextUrgent: {
-    color: '#fff',
   },
 });

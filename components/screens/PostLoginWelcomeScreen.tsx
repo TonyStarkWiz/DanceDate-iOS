@@ -54,10 +54,6 @@ export const PostLoginWelcomeScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Continue to App Button */}
-      <TouchableOpacity style={styles.continueButton} onPress={() => router.push('/(tabs)')}>
-        <Text style={styles.continueButtonText}>Continue to App</Text>
-      </TouchableOpacity>
     </View>
   );
 };
@@ -119,27 +115,6 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  continueButton: {
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    paddingVertical: 18,
-    paddingHorizontal: 30,
-    alignItems: 'center',
-    marginTop: 30,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  continueButtonText: {
-    color: '#8B5CF6',
     fontSize: 18,
     fontWeight: '600',
   },

@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DanceDate Apple Watch - Pixel Perfect Screenshots</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            color: white;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #4A148C;
+            margin-bottom: 30px;
+            font-size: 32px;
+        }
+        
+        .instructions {
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            padding: 25px;
+            margin: 30px 0;
+            text-align: center;
+            border: 2px solid #4A148C;
+        }
+        
+        .instructions h3 {
+            color: #FFD700;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        
+        .instructions p {
+            margin: 8px 0;
+            font-size: 16px;
+        }
+        
+        .size-section {
+            margin-bottom: 60px;
+            padding: 20px;
+            border: 1px solid #333;
+            border-radius: 10px;
+        }
+        
+        .size-title {
+            font-size: 28px;
+            color: #FFD700;
+            margin-bottom: 25px;
+            text-align: center;
+            background: #4A148C;
+            padding: 15px;
+            border-radius: 10px;
+        }
+        
+        .watch-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 40px;
+            justify-items: center;
+        }
+        
+        .apple-watch {
+            background: #000;
+            border-radius: 60px;
+            padding: 40px;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.8);
+            position: relative;
+            border: 3px solid #333;
+        }
+        
+        /* Exact App Store dimensions */
+        .size-410x502 {
+            width: 410px;
+            height: 502px;
+        }
+        
+        .size-416x496 {
+            width: 416px;
+            height: 496px;
+        }
+        
+        .size-396x484 {
+            width: 396px;
+            height: 484px;
+        }
+        
+        .size-368x448 {
+            width: 368px;
+            height: 448px;
+        }
+        
+        .size-312x390 {
+            width: 312px;
+            height: 390px;
+        }
+        
+        .watch-screen {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #4A148C, #6A1B9A);
+            border-radius: 40px;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+        }
+        
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 18px;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        
+        .app-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 25px;
+            color: #FFD700;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        .button {
+            background: rgba(255,255,255,0.25);
+            border: 2px solid rgba(255,255,255,0.4);
+            border-radius: 12px;
+            padding: 12px 18px;
+            margin: 8px 0;
+            font-size: 16px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+        
+        .button:hover {
+            background: rgba(255,255,255,0.35);
+            transform: translateY(-1px);
+        }
+        
+        .icon {
+            font-size: 36px;
+            margin-bottom: 15px;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+        }
+        
+        .notification {
+            background: #FF3B30;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            box-shadow: 0 2px 8px rgba(255,59,48,0.6);
+        }
+        
+        .screenshot-label {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 18px;
+            color: #FFD700;
+            font-weight: bold;
+            background: rgba(74,20,140,0.8);
+            padding: 10px;
+            border-radius: 8px;
+        }
+        
+        .dimension-label {
+            text-align: center;
+            margin-top: 8px;
+            font-size: 16px;
+            color: #999;
+            font-weight: 600;
+        }
+        
+        .capture-instructions {
+            background: rgba(255,215,0,0.1);
+            border: 2px solid #FFD700;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        
+        .capture-instructions h4 {
+            color: #FFD700;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .capture-instructions ol {
+            margin-left: 20px;
+        }
+        
+        .capture-instructions li {
+            margin: 8px 0;
+            font-size: 16px;
+        }
+        
+        .download-btn {
+            background: #4A148C;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            cursor: pointer;
+            margin: 10px 5px;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+        
+        .download-btn:hover {
+            background: #6A1B9A;
+        }
+        
+        .warning {
+            background: rgba(255,59,48,0.1);
+            border: 2px solid #FF3B30;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .warning h4 {
+            color: #FF3B30;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💃 DanceDate Apple Watch - Pixel Perfect Screenshots</h1>
+        
+        <div class="warning">
+            <h4>⚠️ Important: Exact Dimensions Required</h4>
+            <p>App Store Connect requires EXACT pixel dimensions. Use the methods below to ensure perfect screenshots.</p>
+        </div>
+        
+        <div class="instructions">
+            <h3>📱 How to Capture Pixel-Perfect Screenshots</h3>
+            <p><strong>Method 1 (Recommended):</strong> Use browser developer tools for exact dimensions</p>
+            <p><strong>Method 2:</strong> Use macOS Screenshot app with precise selection</p>
+            <p><strong>Method 3:</strong> Use third-party screenshot tools like CleanShot X</p>
+        </div>
+        
+        <div class="capture-instructions">
+            <h4>🔧 Detailed Capture Instructions</h4>
+            <ol>
+                <li><strong>Right-click</strong> on any Apple Watch mockup below</li>
+                <li><strong>Select "Inspect Element"</strong> from the context menu</li>
+                <li><strong>In the developer tools</strong>, find the <code>.apple-watch</code> element</li>
+                <li><strong>Right-click</strong> on the <code>.apple-watch</code> element in the HTML</li>
+                <li><strong>Choose "Capture node screenshot"</strong> from the context menu</li>
+                <li><strong>Save</strong> with descriptive filename (e.g., "dancedate-watch-dashboard-410x502.png")</li>
+            </ol>
+        </div>
+        
+        <!-- 410 × 502px (Series 7/8/9 45mm) -->
+        <div class="size-section">
+            <div class="size-title">410 × 502px - Apple Watch Series 7/8/9 (45mm)</div>
+            <div class="watch-grid">
+                <!-- Main Dashboard -->
+                <div class="apple-watch size-410x502">
+                    <div class="watch-screen">
+                        <div class="status-bar">
+                            <span>🕐 2:43</span>
+                            <span>🔋 100%</span>
+                        </div>
+                        <div class="content">
+                            <div class="icon">💃</div>
+                            <div class="app-title">DanceDate</div>
+                            <div class="button">Find Events</div>
+                            <div class="button">Quick Match</div>
+                            <div class="button">Messages</div>
+                        </div>
+                    </div>
+                    <div class="screenshot-label">Main Dashboard</div>
+                    <div class="dimension-label">410 × 502px</div>
+                </div>
+                
+                <!-- Event List -->
+                <div class="apple-watch size-410x502">
+                    <div class="watch-screen">
+                        <div class="status-bar">
+                            <span>← Events</span>
+                            <span>🔍</span>
+                        </div>
+                        <div class="content">
+                            <div style="font-size: 14px; text-align: left; width: 100%;">
+                                <div style="margin-bottom: 12px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                                    📅 Tonight 7:00 PM<br>
+                                    Salsa Night<br>
+                                    📍 Dance Studio NYC
+                                </div>
+                                <div style="margin-bottom: 12px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                                    📅 Tomorrow 8:00 PM<br>
+                                    Bachata Workshop<br>
+                                    📍 Latin Dance Club
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="screenshot-label">Event List</div>
+                    <div class="dimension-label">410 × 502px</div>
+                </div>
+                
+                <!-- Quick Match -->
+                <div class="apple-watch size-410x502">
+                    <div class="watch-screen">
+                        <div class="status-bar">
+                            <span>← Quick Match</span>
+                        </div>
+                        <div class="content">
+                            <div class="icon">💃💃💃</div>
+                            <div style="font-size: 16px; margin-bottom: 20px; line-height: 1.4;">
+                                Finding your<br>
+                                perfect dance<br>
+                                partner...
+                            </div>
+                            <div class="button">Cancel</div>
+                        </div>
+                    </div>
+                    <div class="screenshot-label">Quick Match</div>
+                    <div class="dimension-label">410 × 502px</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 416 × 496px (Series 7/8/9 41mm) -->
+        <div class="size-section">
+            <div class="size-title">416 × 496px - Apple Watch Series 7/8/9 (41mm)</div>
+            <div class="watch-grid">
+                <!-- Main Dashboard -->
+                <div class="apple-watch size-416x496">
+                    <div class="watch-screen">
+                        <div class="status-bar">
+                            <span>🕐 2:43</span>
+                            <span>🔋 100%</span>
+                        </div>
+                        <div class="content">
+                            <div class="icon">💃</div>
+                            <div class="app-title">DanceDate</div>
+                            <div class="button">Find Events</div>
+                            <div class="button">Quick Match</div>
+                            <div class="button">Messages</div>
+                        </div>
+                    </div>
+                    <div class="screenshot-label">Main Dashboard</div>
+                    <div class="dimension-label">416 × 496px</div>
+                </div>
+                
+                <!-- Messages -->
+                <div class="apple-watch size-416x496">
+                    <div class="watch-screen">
+                        <div class="status-bar">
+                            <span>← Messages</span>
+                        </div>
+                        <div class="content">
+                            <div style="font-size: 14px; text-align: left; width: 100%;">
+                                <div style="margin-bottom: 10px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                                    👤 Maria<br>
+                                    "See you at salsa!"<br>
+                                    🕐 2:30 PM
+                                </div>
+                                <div style="margin-bottom: 10px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                                    👤 Carlos<br>
+                                    "Great dancing!"<br>
+                                    🕐 1:45 PM
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="screenshot-label">Messages</div>
+                    <div class="dimension-label">416 × 496px</div>
+                </div>
+                
+                <!-- Notification -->
+                <div class="apple-watch size-416x496">
+                    <div class="watch-screen">
+                        <div class="status-bar">
+                            <span>🔔 New Match!</span>
+                        </div>
+                        <div class="content">
+                            <div class="icon">💃💃</div>
+                            <div style="font-size: 14px; margin-bottom: 15px; line-height: 1.4;">
+                                You have a new<br>
+                                dance partner match!
+                            </div>
+                            <div style="font-size: 12px; margin-bottom: 15px; background: rgba(255,255,255,0.1); padding: 8px; border-radius: 8px;">
+                                👤 Maria<br>
+                                💃 Salsa & Bachata
+                            </div>
+                            <div class="button">View Match</div>
+                        </div>
+                    </div>
+                    <div class="notification"></div>
+                    <div class="screenshot-label">New Match</div>
+                    <div class="dimension-label">416 × 496px</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 396 × 484px (Series 6 44mm) -->
+        <div class="size-section">
+            <div class="size-title">396 × 484px - Apple Watch Series 6 and earlier (44mm)</div>
+            <div class="watch-grid">
+                <!-- Main Dashboard -->
+                <div class="apple-watch size-396x484">
+                    <div class="watch-screen">
+                        <div class="status-bar">
+                            <span>🕐 2:43</span>
+                            <span>🔋 100%</span>
+                        </div>
+                        <div class="content">
+                            <div class="icon">💃</div>
+                            <div class="app-title">DanceDate</div>
+                            <div class="button">Find Events</div>
+                            <div class="button">Quick Match</div>
+                            <div class="button">Messages</div>
+                        </div>
+                    </div>
+                    <div class="screenshot-label">Main Dashboard</div>
+                    <div class="dimension-label">396 × 484px</div>
+                </div>
+                
+                <!-- Profile -->
+                <div class="apple-watch size-396x484">
+                    <div class="watch-screen">
+                        <div class="status-bar">
+                            <span>← Profile</span>
+                        </div>
+                        <div class="content">
+                            <div class="icon">👤</div>
+                            <div class="app-title">Anthony</div>
+                            <div style="font-size: 14px; margin-bottom: 15px; background: rgba(255,255,255,0.1); padding: 12px; border-radius: 8px;">
+                                💃 Salsa<br>
+                                💃 Bachata<br>
+                                💃 Swing
+                            </div>
+                            <div class="button">Edit Profile</div>
+                        </div>
+                    </div>
+                    <div class="screenshot-label">Profile</div>
+                    <div class="dimension-label">396 × 484px</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 368 × 448px (Series 6 40mm) -->
+        <div class="size-section">
+            <div class="size-title">368 × 448px - Apple Watch Series 6 and earlier (40mm)</div>
+            <div class="watch-grid">
+                <!-- Main Dashboard -->
+                <div class="apple-watch size-368x448">
+                    <div class="watch-screen">
+                        <div class="status-bar">
+                            <span>🕐 2:43</span>
+                            <span>🔋 100%</span>
+                        </div>
+                        <div class="content">
+                            <div class="icon">💃</div>
+                            <div class="app-title">DanceDate</div>
+                            <div class="button">Find Events</div>
+                            <div class="button">Quick Match</div>
+                            <div class="button">Messages</div>
+                        </div>
+                    </div>
+                    <div class="screenshot-label">Main Dashboard</div>
+                    <div class="dimension-label">368 × 448px</div>
+                </div>
+                
+                <!-- Event List -->
+                <div class="apple-watch size-368x448">
+                    <div class="watch-screen">
+                        <div class="status-bar">
+                            <span>← Events</span>
+                            <span>🔍</span>
+                        </div>
+                        <div class="content">
+                            <div style="font-size: 12px; text-align: left; width: 100%;">
+                                <div style="margin-bottom: 10px; padding: 6px; background: rgba(255,255,255,0.1); border-radius: 6px;">
+                                    📅 Tonight 7:00 PM<br>
+                                    Salsa Night<br>
+                                    📍 Dance Studio NYC
+                                </div>
+                                <div style="margin-bottom: 10px; padding: 6px; background: rgba(255,255,255,0.1); border-radius: 6px;">
+                                    📅 Tomorrow 8:00 PM<br>
+                                    Bachata Workshop<br>
+                                    📍 Latin Dance Club
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="screenshot-label">Event List</div>
+                    <div class="dimension-label">368 × 448px</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 312 × 390px (Series 3 38mm) -->
+        <div class="size-section">
+            <div class="size-title">312 × 390px - Apple Watch Series 3 and earlier (38mm)</div>
+            <div class="watch-grid">
+                <!-- Main Dashboard -->
+                <div class="apple-watch size-312x390">
+                    <div class="watch-screen">
+                        <div class="status-bar">
+                            <span>🕐 2:43</span>
+                            <span>🔋 100%</span>
+                        </div>
+                        <div class="content">
+                            <div class="icon">💃</div>
+                            <div class="app-title">DanceDate</div>
+                            <div class="button">Find Events</div>
+                            <div class="button">Quick Match</div>
+                            <div class="button">Messages</div>
+                        </div>
+                    </div>
+                    <div class="screenshot-label">Main Dashboard</div>
+                    <div class="dimension-label">312 × 390px</div>
+                </div>
+                
+                <!-- Quick Match -->
+                <div class="apple-watch size-312x390">
+                    <div class="watch-screen">
+                        <div class="status-bar">
+                            <span>← Quick Match</span>
+                        </div>
+                        <div class="content">
+                            <div class="icon">💃💃💃</div>
+                            <div style="font-size: 14px; margin-bottom: 15px; line-height: 1.4;">
+                                Finding your<br>
+                                perfect dance<br>
+                                partner...
+                            </div>
+                            <div class="button">Cancel</div>
+                        </div>
+                    </div>
+                    <div class="screenshot-label">Quick Match</div>
+                    <div class="dimension-label">312 × 390px</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="instructions">
+            <h3>📋 Final Checklist</h3>
+            <p>✅ Screenshots are exactly the required dimensions</p>
+            <p>✅ Each screenshot shows a different app feature</p>
+            <p>✅ Filenames are descriptive and include dimensions</p>
+            <p>✅ Screenshots are saved as PNG files</p>
+            <p>✅ Ready for App Store Connect submission</p>
+        </div>
+    </div>
+</body>
+</html>

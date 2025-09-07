@@ -10,66 +10,52 @@ import {
     ActivityIndicator,
     Alert,
     FlatList,
-    Pressable,
     RefreshControl,
     StyleSheet,
     Text,
-    View
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '../ThemedText';
 
 /**
- * 🧪 FIXED Interest Button with proper Pressable and stopPropagation
+ * 🧪 APPROACH 2: Real-time Interest State Component
+ * Uses Firestore real-time listeners for automatic UI synchronization
  */
 const InterestButton: React.FC<{ event: DanceEvent; onPress: () => void }> = ({ event, onPress }) => {
   const { isInterested, isLoading } = useInterestState(event.id);
   
-  const handlePress = (e: any) => {
-    // RN Web: prevent parent card from capturing
-    if (e?.stopPropagation) e.stopPropagation();
-    
-    Alert.alert('🧪 Button Pressed!', `Event: ${event.name}\nID: ${event.id}\nInterested: ${isInterested}\nLoading: ${isLoading}`);
-    
-    onPress();
-  };
-  
   return (
-    <View style={{ position: 'relative', zIndex: 2 }}>
-      <Pressable
-        onPress={handlePress}
-        accessibilityRole="button"
-        hitSlop={12}
-        disabled={isLoading}
-        style={({ pressed }) => [
-          styles.interestButton,
-          isInterested && styles.interestButtonActive,
-          isLoading && styles.interestButtonLoading,
-          pressed && { opacity: 0.7 },
-          { position: 'relative', zIndex: 2 }
-        ]}
-      >
-        {isLoading ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <>
-            <Ionicons 
-              name={isInterested ? "heart" : "heart-outline"} 
-              size={20} 
-              color="#fff" 
-            />
-            <Text style={styles.interestButtonText}>
-              {isInterested ? "Interested!" : "I'm Interested"}
-            </Text>
-          </>
-        )}
-      </Pressable>
-    </View>
+    <TouchableOpacity
+      style={[
+        styles.interestButton,
+        isInterested && styles.interestButtonActive,
+        isLoading && styles.interestButtonLoading
+      ]}
+      onPress={onPress}
+      disabled={isLoading}
+    >
+      {isLoading ? (
+        <ActivityIndicator size="small" color="#fff" />
+      ) : (
+        <>
+          <Ionicons 
+            name={isInterested ? "heart" : "heart-outline"} 
+            size={20} 
+            color="#fff" 
+          />
+          <Text style={styles.interestButtonText}>
+            {isInterested ? "Interested!" : "I'm Interested"}
+          </Text>
+        </>
+      )}
+    </TouchableOpacity>
   );
 };
 
-export default function EventsScreen() {
+export default function EventsScreenRealtime() {
   const { user } = useAuth();
   const [events, setEvents] = useState<DanceEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,12 +76,12 @@ export default function EventsScreen() {
   const loadEvents = async () => {
     try {
       setLoading(true);
-      console.log('🧪 EventsScreen: Loading events from Dance Events API');
+      console.log('🧪 EventsScreenRealtime: Loading events from Dance Events API');
       const fetchedEvents = await eventsApiService.fetchEvents(1, 25);
-      console.log('🧪 EventsScreen: Loaded', fetchedEvents.length, 'events');
+      console.log('🧪 EventsScreenRealtime: Loaded', fetchedEvents.length, 'events');
       setEvents(fetchedEvents);
     } catch (error) {
-      console.error('🧪 EventsScreen: Error loading events:', error);
+      console.error('🧪 EventsScreenRealtime: Error loading events:', error);
       Alert.alert('Error', 'Failed to load events. Please try again.');
     } finally {
       setLoading(false);
@@ -109,23 +95,19 @@ export default function EventsScreen() {
   };
 
   const handleMarkInterest = async (event: DanceEvent) => {
-    Alert.alert('🧪 handleMarkInterest Called', `Event: ${event.name}\nID: ${event.id}`);
-    
     if (!user) {
-      Alert.alert('🧪 No User Found', 'User not authenticated');
+      Alert.alert('Please log in', 'You need to be logged in to mark interest in events.');
       return;
     }
 
-    Alert.alert('🧪 User Found', `User ID: ${user.id}`);
-    
     try {
       setMatchingEventId(event.id);
-      Alert.alert('🧪 Calling API', `Marking interest in: ${event.name}`);
+      console.log(`🧪 🎯 Marking interest in event: ${event.name} (${event.id})`);
 
       const result = await eventsApiService.markInterestInEvent(event);
 
       if (result.success && result.matched && result.partnerName) {
-        Alert.alert('🧪 Match Found!', `Partner: ${result.partnerName}`);
+        console.log(`🧪 🎉 Bilateral match found with: ${result.partnerName}`);
         setCurrentMatch({
           partnerName: result.partnerName,
           eventTitle: event.name,
@@ -133,87 +115,76 @@ export default function EventsScreen() {
         });
         setShowMatchNotification(true);
       } else if (result.success) {
-        Alert.alert('🧪 Interest Marked', 'No match yet, but interest saved!');
+        console.log(`🧪 ℹ️ Interest marked, no bilateral match yet`);
+        Alert.alert(
+          'Interest Marked!',
+          `You've shown interest in "${event.name}". We'll notify you when someone else is interested too!`
+        );
       } else {
-        Alert.alert('🧪 API Error', 'Failed to mark interest');
+        Alert.alert('Error', 'Failed to mark interest. Please try again.');
       }
     } catch (error) {
-      Alert.alert('🧪 Exception', `Error: ${error}`);
+      console.error('🧪 ❌ Error marking interest:', error);
+      Alert.alert('Error', 'Failed to mark interest. Please try again.');
     } finally {
       setMatchingEventId(null);
     }
   };
 
-  const renderEventItem = ({ item }: { item: DanceEvent }) => {
-    Alert.alert('🧪 Render EventCard', `ID: ${item.id}\nTitle: ${item.name}`);
-    
-    return (
-      <View style={[styles.eventCard, { position: 'relative' }]}>
-        <View style={styles.eventHeader}>
-          <ThemedText type="subtitle" style={styles.eventTitle}>
-            {item.name}
-          </ThemedText>
-          <View style={styles.eventMeta}>
-            <Ionicons name="location-outline" size={16} color="#666" />
-            <Text style={styles.eventLocation}>
-              {item.location.name || item.location.city}, {item.location.country}
-            </Text>
-          </View>
+  const renderEventItem = ({ item }: { item: DanceEvent }) => (
+    <TouchableOpacity style={styles.eventCard}>
+      <View style={styles.eventHeader}>
+        <ThemedText type="subtitle" style={styles.eventTitle}>
+          {item.name}
+        </ThemedText>
+        <View style={styles.eventMeta}>
+          <Ionicons name="location-outline" size={16} color="#666" />
+          <Text style={styles.eventLocation}>
+            {item.location.name || item.location.city}, {item.location.country}
+          </Text>
         </View>
-        
-        <View style={styles.eventDetails}>
-          <View style={styles.eventInfo}>
-            <Ionicons name="calendar-outline" size={16} color="#666" />
-            <Text style={styles.eventDate}>
-              {new Date(item.startDate).toLocaleDateString()}
-              {item.endDate && item.endDate !== item.startDate && 
-                ` - ${new Date(item.endDate).toLocaleDateString()}`
-              }
-            </Text>
-          </View>
-          
-          <View style={styles.eventTags}>
-            {Object.values(item.dances).slice(0, 3).map((dance, index) => (
-              <View key={index} style={styles.tag}>
-                <Text style={styles.tagText}>{dance}</Text>
-              </View>
-            ))}
-            {Object.values(item.dances).length > 3 && (
-              <View style={styles.tag}>
-                <Text style={styles.tagText}>+{Object.values(item.dances).length - 3}</Text>
-              </View>
-            )}
-          </View>
-        </View>
-        
-        {item.description && (
-          <View style={styles.eventDescription}>
-            <Text style={styles.descriptionText} numberOfLines={2}>
-              {item.description}
-            </Text>
-          </View>
-        )}
-
-        {/* 🧪 Fixed Interest Button with proper zIndex */}
-        <InterestButton 
-          event={item} 
-          onPress={() => {
-            Alert.alert('🧪 Toggle Interest Clicked', `Event ID: ${item.id}`);
-            handleMarkInterest(item);
-          }} 
-        />
-        
-        {/* 🧪 Separate View Event Button */}
-        <Pressable
-          style={[styles.viewEventButton, { position: 'relative', zIndex: 2 }]}
-          onPress={() => Alert.alert('View Event', `Would open: ${item.name}`)}
-        >
-          <Ionicons name="open-outline" size={16} color="#8B5CF6" />
-          <Text style={styles.viewEventText}>View Event</Text>
-        </Pressable>
       </View>
-    );
-  };
+      
+      <View style={styles.eventDetails}>
+        <View style={styles.eventInfo}>
+          <Ionicons name="calendar-outline" size={16} color="#666" />
+          <Text style={styles.eventDate}>
+            {new Date(item.startDate).toLocaleDateString()}
+            {item.endDate && item.endDate !== item.startDate && 
+              ` - ${new Date(item.endDate).toLocaleDateString()}`
+            }
+          </Text>
+        </View>
+        
+        <View style={styles.eventTags}>
+          {Object.values(item.dances).slice(0, 3).map((dance, index) => (
+            <View key={index} style={styles.tag}>
+              <Text style={styles.tagText}>{dance}</Text>
+            </View>
+          ))}
+          {Object.values(item.dances).length > 3 && (
+            <View style={styles.tag}>
+              <Text style={styles.tagText}>+{Object.values(item.dances).length - 3}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+      
+      {item.description && (
+        <View style={styles.eventDescription}>
+          <Text style={styles.descriptionText} numberOfLines={2}>
+            {item.description}
+          </Text>
+        </View>
+      )}
+
+      {/* 🧪 Real-time Interest Button */}
+      <InterestButton 
+        event={item} 
+        onPress={() => handleMarkInterest(item)} 
+      />
+    </TouchableOpacity>
+  );
 
   if (loading) {
     return (
@@ -231,20 +202,6 @@ export default function EventsScreen() {
       <View style={styles.header}>
         <BackButton />
         <ThemedText type="title">Dance Events</ThemedText>
-        {/* 🧪 Debug button */}
-        <Pressable 
-          style={styles.debugButton}
-          onPress={() => {
-            Alert.alert('🧪 Debug Info', 
-              `User: ${user ? 'Logged in' : 'Not logged in'}\n` +
-              `User ID: ${user?.id || 'N/A'}\n` +
-              `Events: ${events.length}\n` +
-              `First Event: ${events[0]?.name || 'N/A'}`
-            );
-          }}
-        >
-          <Text style={styles.debugButtonText}>🧪 Debug</Text>
-        </Pressable>
       </View>
 
       <FlatList
@@ -270,8 +227,13 @@ export default function EventsScreen() {
       {currentMatch && (
         <MatchNotification
           visible={showMatchNotification}
-          match={currentMatch}
+          partnerName={currentMatch.partnerName}
+          eventTitle={currentMatch.eventTitle}
           onClose={() => setShowMatchNotification(false)}
+          onViewProfile={() => {
+            setShowMatchNotification(false);
+            router.push(`/partnerProfile/${currentMatch.partnerId}`);
+          }}
           onStartChat={() => {
             setShowMatchNotification(false);
             router.push('/chat');
@@ -405,33 +367,5 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     marginTop: 8,
-  },
-  debugButton: {
-    backgroundColor: '#FF6B6B',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    marginLeft: 10,
-  },
-  debugButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  viewEventButton: {
-    backgroundColor: '#f0f0f0',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    marginTop: 8,
-    gap: 6,
-  },
-  viewEventText: {
-    color: '#8B5CF6',
-    fontSize: 14,
-    fontWeight: '500',
   },
 });

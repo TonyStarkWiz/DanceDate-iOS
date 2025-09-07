@@ -1,14 +1,16 @@
 import { COLLECTIONS, auth, db } from '@/config/firebase';
 import {
-    Timestamp,
-    addDoc,
-    collection,
-    doc,
-    getDoc,
-    getDocs,
-    serverTimestamp,
-    setDoc,
-    writeBatch
+  Unsubscribe,
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  serverTimestamp,
+  setDoc,
+  writeBatch
 } from 'firebase/firestore';
 
 export interface BilateralMatchResult {
@@ -50,6 +52,90 @@ class BilateralMatchingService {
   private readonly WRITE_PENDING_MATCH = true;
 
   /**
+   * 🎯 SANITIZE DOC ID FOR FIRESTORE PATHS
+   * Prevents issues with URLs, special characters, etc.
+   */
+  private toDocId(raw: string): string {
+    // Stable, URL-safe; avoids '/', '+', '=' collisions from base64
+    return encodeURIComponent(raw);
+  }
+
+  /**
+   * 🎯 SYMMETRIC "IS INTERESTED" CHECKER FOR UI
+   * Reads from the same place we write to
+   */
+  async isInterested(uid: string, eventId: string): Promise<boolean> {
+    try {
+      const eventDocId = this.toDocId(String(eventId));
+      const ref = doc(db, COLLECTIONS.USERS, uid, 'interested_events', eventDocId);
+      const docSnapshot = await getDoc(ref);
+      const exists = docSnapshot.exists();
+      const status = docSnapshot.data()?.status ?? 'active';
+      return exists && status === 'active';
+    } catch (error) {
+      console.error('🧪 Error checking interest:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 🎯 UNMARK INTEREST (SOFT DELETE)
+   * Mirrors the same IDs we use for writing
+   */
+  async unmarkInterest(uid: string, eventId: string): Promise<void> {
+    try {
+      const eventDocId = this.toDocId(String(eventId));
+      
+      // Soft delete both sides
+      await Promise.all([
+        setDoc(
+          doc(db, COLLECTIONS.USERS, uid, 'interested_events', eventDocId), 
+          { status: 'inactive' }, 
+          { merge: true }
+        ),
+        setDoc(
+          doc(db, COLLECTIONS.EVENTS, eventDocId, 'interested_users', uid), 
+          { status: 'inactive' }, 
+          { merge: true }
+        ),
+      ]);
+
+      // Also remove from flat collection for compatibility
+      try {
+        await deleteDoc(doc(db, COLLECTIONS.EVENT_INTERESTS, `${uid}_${eventId}`));
+      } catch (compatError) {
+        console.error('🧪 ⚠️ Error removing compatibility doc:', compatError);
+      }
+
+      console.log('🧪 ✅ Interest unmarked successfully');
+    } catch (error) {
+      console.error('🧪 Error unmarking interest:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 🎯 REAL-TIME INTEREST LISTENER FOR UI
+   * Subscribe to interest changes to keep UI in sync
+   */
+  watchInterest(uid: string, eventId: string, callback: (isInterested: boolean) => void): Unsubscribe {
+    const eventDocId = this.toDocId(String(eventId));
+    const ref = doc(db, COLLECTIONS.USERS, uid, 'interested_events', eventDocId);
+    
+    return onSnapshot(
+      ref, 
+      (snap) => {
+        const isInterested = snap.exists() && (snap.data()?.status ?? 'active') === 'active';
+        callback(isInterested);
+      }, 
+      (err) => {
+        console.error('🧪 watchInterest error', err);
+        callback(false);
+      }
+    );
+  }
+
+  /**
    * 🎯 MARK INTEREST AND DETECT BILATERAL MATCH
    */
   async markInterestAndDetectMatch(
@@ -69,7 +155,8 @@ class BilateralMatchingService {
       }
 
       const userId = currentUser.uid;
-      const now = Timestamp.now();
+      const now = serverTimestamp(); // Use server timestamp for consistency
+      const eventDocId = this.toDocId(eventIdStr); // Sanitize doc ID
 
       // 🎯 WRITE/UPSERT USER PROFILE
       // Write both displayName and name for UI compatibility
@@ -89,18 +176,18 @@ class BilateralMatchingService {
       // 🎯 WRITE INTEREST (BATCH)
       const batch = writeBatch(db);
 
-      // user/{uid}/interested_events/{eventId}
-      const userInterestRef = doc(db, COLLECTIONS.USERS, userId, 'interested_events', eventIdStr);
+      // user/{uid}/interested_events/{eventDocId} - using sanitized ID
+      const userInterestRef = doc(db, COLLECTIONS.USERS, userId, 'interested_events', eventDocId);
       const userInterestData: UserInterest = {
-        eventId: eventIdStr,
+        eventId: eventIdStr, // Store raw ID in document fields
         title: eventTitle,
         intent: intentType,
         timestamp: now,
         status: 'active'
       };
 
-      // events/{eventId}/interested_users/{uid}
-      const eventInterestRef = doc(db, COLLECTIONS.EVENTS, eventIdStr, 'interested_users', userId);
+      // events/{eventDocId}/interested_users/{uid} - using sanitized ID
+      const eventInterestRef = doc(db, COLLECTIONS.EVENTS, eventDocId, 'interested_users', userId);
       const eventInterestData: EventInterest = {
         userId,
         name: currentUser.displayName || 'Anonymous',
@@ -115,6 +202,29 @@ class BilateralMatchingService {
 
       await batch.commit();
       console.log('🧪 ✅ Interest written to Firestore');
+
+      // 🎯 DUAL-WRITE COMPATIBILITY DOC (for UI that reads flat collection)
+      try {
+        await setDoc(
+          doc(db, COLLECTIONS.EVENT_INTERESTS, `${userId}_${eventIdStr}`),
+          {
+            userId,
+            eventId: eventIdStr,
+            eventTitle: eventTitle,
+            eventInstructor: 'Unknown', // Placeholder
+            eventLocation: 'Unknown', // Placeholder  
+            eventSource: 'bilateral_matching',
+            interestedAt: serverTimestamp(),
+            interested: true,
+            status: 'active'
+          },
+          { merge: true }
+        );
+        console.log('🧪 ✅ Compatibility doc written to flat collection');
+      } catch (compatError) {
+        console.error('🧪 ⚠️ Error writing compatibility doc:', compatError);
+        // Don't fail the whole operation for compatibility doc
+      }
 
       // 🎯 CHECK FOR BILATERAL MATCH
       const matchResult = await this.checkForBilateralMatch(eventIdStr, eventTitle);
@@ -174,8 +284,9 @@ class BilateralMatchingService {
       const userId = currentUser.uid;
 
       // All users who marked interest in this event (except me)
+      const eventDocId = this.toDocId(eventId);
       const interestedUsersSnapshot = await getDocs(
-        collection(db, COLLECTIONS.EVENTS, eventId, 'interested_users')
+        collection(db, COLLECTIONS.EVENTS, eventDocId, 'interested_users')
       );
 
       const potentialMatches = interestedUsersSnapshot.docs.filter((d) => d.id !== userId);
@@ -245,6 +356,7 @@ class BilateralMatchingService {
       {
         userId1: a,
         userId2: b,
+        participants: [a, b], // Add participants array for getUserMatches query compatibility
         sharedEvents: sharedEventIds,
         matchStrength: strength,
         status,

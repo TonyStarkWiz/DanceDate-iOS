@@ -20,9 +20,12 @@ service cloud.firestore {
       allow update, delete: if isOwner(uid);
       allow create: if isSignedIn(); // Allow any authenticated user to create user documents
       
-      // User's interested events subcollection
+      // User's interested events subcollection - RELAXED FOR DEBUGGING
       match /interested_events/{eventId} {
-        allow read, write: if isSignedIn(); // Temporary: allow all authenticated users for debugging
+        allow read, write: if isSignedIn(); // Allow all authenticated users
+        allow create: if isSignedIn(); // Explicit create permission
+        allow update: if isSignedIn(); // Explicit update permission
+        allow delete: if isSignedIn(); // Explicit delete permission
       }
     }
 
@@ -109,11 +112,13 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && request.auth.uid == userId;
     }
 
-    // Event interests collection - users can read all interests (for matching), but only write their own
+    // Event interests collection - RELAXED FOR DEBUGGING
     match /event_interests/{interestId} {
       allow read: if isSignedIn(); // Allow reading all interests for matching
-      allow write: if isSignedIn() && 
-        request.auth.uid == interestId.split('_')[0]; // Only write own interests
+      allow write: if isSignedIn(); // RELAXED: Allow all authenticated users to write
+      allow create: if isSignedIn(); // Explicit create permission
+      allow update: if isSignedIn(); // Explicit update permission
+      allow delete: if isSignedIn(); // Explicit delete permission
     }
 
     // Event matches collection - users can read all matches for matching system
