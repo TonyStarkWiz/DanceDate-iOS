@@ -3,10 +3,9 @@ import { IntentSelectionBottomSheet, IntentType } from '@/components/ui/IntentSe
 import { PremiumUpgradePopup } from '@/components/ui/PremiumUpgradePopup';
 import { useAuth } from '@/contexts/AuthContext';
 import { eventInterestService } from '@/services/eventInterestService';
-import { intentBasedMatchingService } from '@/services/intentBasedMatchingService';
 import { googleCustomSearchClient, GoogleSearchResult } from '@/services/googleCustomSearchService';
+import { intentBasedMatchingService } from '@/services/intentBasedMatchingService';
 import { LocationData, locationService, PostalCodeValidator } from '@/services/locationService';
-import { matchDetectionService } from '@/services/matchDetectionService';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
@@ -325,113 +324,7 @@ export const EventListScreen: React.FC = () => {
       setSelectedEventForIntent(null);
     }
   };
-      
-      // Add to loading state
-      setLoadingInterests(prev => new Set([...prev, event.id]));
-      
-      // Test Firestore connection first
-      try {
-        const { db } = await import('@/config/firebase');
-        const { doc } = await import('firebase/firestore');
-        const testDoc = doc(db, 'users', user.id);
-        Alert.alert('🧪 Firestore Test', `Testing write to: users/${user.id}/interested_events/test`);
-      } catch (firestoreTestError) {
-        Alert.alert('🧪 Firestore Error', `Firestore test failed: ${firestoreTestError}`);
-        return;
-      }
-      
-      // Save user interest to Firestore (in background) - with better error handling
-      try {
-        await eventInterestService.saveEventInterest(user.id, {
-          id: event.id,
-          title: event.title,
-          description: event.description,
-          location: event.location,
-          source: event.source as any,
-          url: event.url,
-          startDate: new Date().toISOString(), // Current date as placeholder
-          instructor: 'Unknown', // Placeholder
-          tags: ['dance'],
-          lat: 0, // Placeholder
-          lng: 0, // Placeholder
-          createdAt: new Date()
-        });
-        console.log('🧪 EventListScreen: Successfully saved interest to Firestore');
-      } catch (firestoreError) {
-        console.error('🧪 EventListScreen: Error saving to Firestore:', firestoreError);
-        // Don't revert UI state - keep the interest marked even if Firestore fails
-        // This ensures better UX - the user sees their action was registered
-      }
-      
-      // Check for matches after saving interest
-      try {
-        const matchResult = await matchDetectionService.checkForMatchesImmediately(user.id, {
-          id: event.id,
-          title: event.title,
-          description: event.description,
-          location: event.location,
-          source: event.source as any,
-          url: event.url,
-          startDate: new Date().toISOString(),
-          instructor: 'Unknown',
-          tags: ['dance'],
-          lat: 0, // Placeholder
-          lng: 0, // Placeholder
-          createdAt: new Date()
-        });
-        
-        if (matchResult.newMatches.length > 0) {
-          console.log('🧪 EventListScreen: Found new matches!', matchResult.newMatches.length);
-          
-          // Show match alert
-          Alert.alert(
-            '🎉 You Have a Match!',
-            `You matched with ${matchResult.newMatches[0].potentialPartner.name} for "${event.title}"! You both are interested in this event.`,
-            [
-              {
-                text: 'View Matches',
-                onPress: () => {
-                  // Navigate to matches screen
-                  console.log('🧪 Navigate to matches screen');
-                }
-              },
-              { text: 'OK', style: 'default' }
-            ]
-          );
-        } else {
-          // Show success message if no matches
-          Alert.alert(
-            'Interest Recorded! 🎉',
-            `You've shown interest in "${event.title}". We'll notify you if someone else is interested too!`,
-            [
-              { text: 'OK', style: 'default' }
-            ]
-          );
-        }
-      } catch (matchError) {
-        console.error('🧪 EventListScreen: Error checking for matches:', matchError);
-        // Still show success message even if match check fails
-        Alert.alert(
-          'Interest Recorded! 🎉',
-          `You've shown interest in "${event.title}". We'll keep you updated about this event!`,
-          [
-            { text: 'OK', style: 'default' }
-          ]
-        );
-      }
-      
-    } catch (error) {
-      console.error('🧪 EventListScreen: Error recording interest:', error);
-      Alert.alert('Error', 'Failed to record your interest. Please try again.');
-    } finally {
-      // Remove from loading state
-      setLoadingInterests(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(event.id);
-        return newSet;
-      });
-    }
-  };
+
 
   const checkPremiumStatus = async () => {
     try {
