@@ -272,6 +272,7 @@ export const EventListScreen: React.FC = () => {
 
   // Handle "I'm Interested" button press - now shows intent selection
   const handleInterestPress = async (event: DanceEvent) => {
+    console.log('🧪 EventListScreen: handleInterestPress called for event:', event.title, 'ID:', event.id);
     Alert.alert('🧪 Interest Button Pressed!', `Event: ${event.title}\nID: ${event.id}`);
     
     try {
@@ -310,19 +311,23 @@ export const EventListScreen: React.FC = () => {
       );
       
       // Update UI state - always save the interest regardless of match result
-      setUserInterests(prev => new Set([...prev, selectedEventForIntent.id]));
-      
-      // Also save to localStorage for persistence
-      if (typeof window !== 'undefined') {
-        try {
-          const currentInterests = Array.from(userInterests);
-          const updatedInterests = [...currentInterests, selectedEventForIntent.id];
-          localStorage.setItem(`userInterests_${user.id}`, JSON.stringify(updatedInterests));
-          console.log('🧪 EventListScreen: Saved interest to localStorage:', selectedEventForIntent.id);
-        } catch (storageError) {
-          console.warn('🧪 EventListScreen: Error saving to localStorage:', storageError);
+      setUserInterests(prev => {
+        const newSet = new Set(prev);
+        newSet.add(selectedEventForIntent.id);
+        console.log('🧪 EventListScreen: Updated userInterests:', Array.from(newSet));
+        
+        // Also save to localStorage for persistence
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`userInterests_${user.id}`, JSON.stringify(Array.from(newSet)));
+            console.log('🧪 EventListScreen: Saved interest to localStorage:', selectedEventForIntent.id);
+          } catch (storageError) {
+            console.warn('🧪 EventListScreen: Error saving to localStorage:', storageError);
+          }
         }
-      }
+        
+        return newSet;
+      });
       
       // Close bottom sheet
       setShowIntentBottomSheet(false);
