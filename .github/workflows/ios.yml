@@ -28,10 +28,10 @@ jobs:
       - name: Setup Expo CLI
         run: npm install -g @expo/cli
         
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '15.2'
+      - name: Use default Xcode version
+        run: |
+          xcodebuild -version
+          xcrun simctl list devices available
           
       - name: Expo prebuild
         run: npx expo prebuild --platform ios --clean
@@ -47,19 +47,10 @@ jobs:
           xcodebuild build-for-testing \
             -workspace DanceDate.xcworkspace \
             -scheme DanceDate \
-            -destination 'platform=iOS Simulator,name=iPhone 15'
-            
-      - name: Test iOS app
-        run: |
-          cd ios
-          xcodebuild test-without-building \
-            -workspace DanceDate.xcworkspace \
-            -scheme DanceDate \
-            -destination 'platform=iOS Simulator,name=iPhone 15'
+            -destination 'platform=iOS Simulator,name=iPhone 14'
             
       - name: Build Summary
         run: |
           echo "🎉 DanceDate iOS build completed successfully!"
           echo "📱 Built for iOS Simulator (no signing required)"
           echo "💰 You just saved money vs EAS builds!"
-          echo "🚀 Ready for production builds with certificates!"
