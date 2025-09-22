@@ -1,0 +1,65 @@
+name: DanceDate iOS Build
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build DanceDate iOS App
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm install
+        
+      - name: Setup Expo CLI
+        run: npm install -g @expo/cli
+        
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.2'
+          
+      - name: Expo prebuild
+        run: npx expo prebuild --platform ios --clean
+          
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios
+          pod install
+          
+      - name: Build iOS app (simulator)
+        run: |
+          cd ios
+          xcodebuild build-for-testing \
+            -workspace DanceDate.xcworkspace \
+            -scheme DanceDate \
+            -destination 'platform=iOS Simulator,name=iPhone 15'
+            
+      - name: Test iOS app
+        run: |
+          cd ios
+          xcodebuild test-without-building \
+            -workspace DanceDate.xcworkspace \
+            -scheme DanceDate \
+            -destination 'platform=iOS Simulator,name=iPhone 15'
+            
+      - name: Build Summary
+        run: |
+          echo "🎉 DanceDate iOS build completed successfully!"
+          echo "📱 Built for iOS Simulator (no signing required)"
+          echo "💰 You just saved money vs EAS builds!"
+          echo "🚀 Ready for production builds with certificates!"
