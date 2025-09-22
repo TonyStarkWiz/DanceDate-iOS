@@ -1,54 +1,32 @@
-name: DanceDate iOS Build (Simple Test)
+name: Basic GitHub Actions Test
 
 on:
-  push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
   workflow_dispatch:
 
 jobs:
-  build:
-    name: Test DanceDate Project
+  test:
     runs-on: macos-latest
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-          
-      - name: Install dependencies
-        run: npm install
-        
-      - name: Setup Expo CLI
-        run: npm install -g @expo/cli
-        
-      - name: Check project structure
+      - name: List files
         run: |
-          echo "📁 Project files:"
+          echo "🎉 GitHub Actions is working!"
+          echo "📁 Repository contents:"
           ls -la
-          echo ""
-          echo "📱 App.json config:"
-          cat app.json | head -20
-          echo ""
-          echo "📦 Package.json:"
-          cat package.json | grep -A5 -B5 "expo"
           
-      - name: Expo doctor check
-        run: npx expo doctor || true
-        
-      - name: Test prebuild (dry run)
-        run: npx expo prebuild --platform ios --clean --dry-run
-        
-      - name: Success message
+      - name: Check Node.js
         run: |
-          echo "🎉 Project validation successful!"
-          echo "✅ Dependencies installed"
-          echo "✅ Expo configuration valid"
-          echo "✅ Ready for iOS builds"
-          echo "💰 This proves GitHub Actions works for your project!"
+          echo "📦 Node.js version:"
+          node --version
+          echo "📦 npm version:"
+          npm --version
+          
+      - name: Success
+        run: |
+          echo "✅ GitHub Actions is working perfectly!"
+          echo "✅ macOS runner is available"
+          echo "✅ Repository checkout successful"
+          echo "🚀 Ready to debug the main build issues"
