@@ -1,32 +1,35 @@
-name: Basic GitHub Actions Test
+name: DanceDate iOS Build
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ master ]
 
 jobs:
-  test:
+  build:
     runs-on: macos-latest
     
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
         
-      - name: List files
-        run: |
-          echo "🎉 GitHub Actions is working!"
-          echo "📁 Repository contents:"
-          ls -la
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
           
-      - name: Check Node.js
-        run: |
-          echo "📦 Node.js version:"
-          node --version
-          echo "📦 npm version:"
-          npm --version
-          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Install Expo CLI
+        run: npm install -g @expo/cli
+        
+      - name: Check Expo config
+        run: npx expo config --type public
+        
       - name: Success
         run: |
-          echo "✅ GitHub Actions is working perfectly!"
-          echo "✅ macOS runner is available"
-          echo "✅ Repository checkout successful"
-          echo "🚀 Ready to debug the main build issues"
+          echo "🎉 DanceDate setup successful!"
+          echo "✅ Dependencies installed"
+          echo "✅ Expo CLI ready"
+          echo "🚀 Ready for iOS builds!"
