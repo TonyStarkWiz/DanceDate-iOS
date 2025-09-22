@@ -27,9 +27,30 @@ jobs:
       - name: Check Expo config
         run: npx expo config --type public
         
+      - name: Expo prebuild (iOS)
+        run: npx expo prebuild --platform ios --clean
+        
+      - name: List iOS files
+        run: |
+          echo "📁 iOS project structure:"
+          ls -la ios/ || echo "iOS folder not found"
+          
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+          
+      - name: Build iOS (Simulator)
+        run: |
+          cd ios
+          xcodebuild -workspace DanceDate.xcworkspace \
+                     -scheme DanceDate \
+                     -destination 'platform=iOS Simulator,name=iPhone 14' \
+                     build
+                     
       - name: Success
         run: |
-          echo "🎉 DanceDate setup successful!"
-          echo "✅ Dependencies installed"
-          echo "✅ Expo CLI ready"
-          echo "🚀 Ready for iOS builds!"
+          echo "🎉 DanceDate iOS build successful!"
+          echo "📱 Built for iOS Simulator"
+          echo "💰 You just saved $99/month vs EAS!"
+          echo "🚀 Ready for App Store builds with certificates!"
