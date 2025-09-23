@@ -1,4 +1,4 @@
-name: DanceDate iOS Build (Fixed)
+name: iOS Build (No Signing Test)
 
 on:
   workflow_dispatch:
@@ -24,23 +24,30 @@ jobs:
       - name: Install Expo CLI
         run: npm install -g @expo/cli
         
-      - name: Create missing sound file
+      - name: Create missing assets
         run: |
           mkdir -p assets/sounds
           touch assets/sounds/notification.wav
           
-      - name: Check project files
-        run: |
-          echo "📁 Checking assets:"
-          ls -la assets/ || echo "No assets folder"
-          ls -la assets/sounds/ || echo "No sounds folder"
-          
-      - name: Expo prebuild (iOS)
+      - name: Expo prebuild
         run: npx expo prebuild --platform ios --clean
         
-      - name: Success - Prebuild Complete
+      - name: Install CocoaPods
         run: |
-          echo "🎉 Expo prebuild successful!"
-          echo "📱 iOS project generated"
-          echo "✅ Ready for Xcode build"
-          echo "💰 Free GitHub Actions working!"
+          cd ios
+          pod install --repo-update
+          
+      - name: Build for iOS Simulator
+        run: |
+          cd ios
+          xcodebuild build \
+            -workspace DanceDate.xcworkspace \
+            -scheme DanceDate \
+            -destination 'platform=iOS Simulator,name=iPhone 14'
+            
+      - name: Success Message
+        run: |
+          echo "🎉 DanceDate iOS build successful!"
+          echo "📱 Built for iOS Simulator (no signing required)"
+          echo "💰 Saving $99/month vs EAS builds!"
+          echo "🚀 Next: Add certificates for App Store deployment"
