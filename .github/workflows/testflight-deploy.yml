@@ -1,0 +1,87 @@
+name: Deploy to TestFlight (With Signing)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+
+jobs:
+  deploy-testflight:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Install Expo CLI
+        run: npm install -g @expo/cli
+        
+      - name: Create missing assets
+        run: |
+          mkdir -p assets/sounds
+          touch assets/sounds/notification.wav
+          
+      - name: Import Code-Signing Certificates
+        uses: Apple-Actions/import-codesign-certs@v2
+        with:
+          p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
+          p12-password: ${{ secrets.CERTIFICATES_P12_PASSWORD }}
+          
+      - name: Download Provisioning Profiles
+        uses: Apple-Actions/download-provisioning-profiles@v1
+        with:
+          bundle-id: com.antho.dancedate
+          issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPSTORE_KEY_ID }}
+          api-private-key: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+          
+      - name: Expo prebuild
+        run: npx expo prebuild --platform ios --clean
+        
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+          
+      - name: Build iOS Archive
+        run: |
+          cd ios
+          xcodebuild archive \
+            -workspace DanceDate.xcworkspace \
+            -scheme DanceDate \
+            -configuration Release \
+            -destination generic/platform=iOS \
+            -archivePath DanceDate.xcarchive \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM=RZ3LX2QC88
+            
+      - name: Export IPA
+        run: |
+          cd ios
+          xcodebuild -exportArchive \
+            -archivePath DanceDate.xcarchive \
+            -exportPath . \
+            -exportOptionsPlist ExportOptions.plist
+            
+      - name: Upload to TestFlight
+        uses: Apple-Actions/upload-testflight-build@v1
+        with:
+          app-path: ios/DanceDate.ipa
+          issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPSTORE_KEY_ID }}
+          api-private-key: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+          
+      - name: Success Notification
+        run: |
+          echo "🎉 SUCCESS! DanceDate deployed to TestFlight!"
+          echo "📱 Check App Store Connect for your build"
+          echo "✈️ TestFlight build will be available shortly"
+          echo "💰 You just deployed for FREE vs $99/month EAS!"
