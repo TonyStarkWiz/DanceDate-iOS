@@ -1,9 +1,9 @@
-name: Build and Deploy to TestFlight
+name: Deploy to TestFlight (With Signing)
 
 on:
   workflow_dispatch:
   push:
-    tags: [ 'v*' ]
+    branches: [ master ]
 
 jobs:
   deploy-testflight:
