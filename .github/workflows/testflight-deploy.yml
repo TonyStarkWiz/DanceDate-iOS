@@ -35,13 +35,10 @@ jobs:
           p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
           p12-password: ${{ secrets.CERTIFICATES_P12_PASSWORD }}
           
-      - name: Download Provisioning Profiles
-        uses: Apple-Actions/download-provisioning-profiles@v1
-        with:
-          bundle-id: com.antho.dancedate
-          issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
-          api-key-id: ${{ secrets.APPSTORE_KEY_ID }}
-          api-private-key: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+      - name: Setup Code Signing
+        run: |
+          echo "Using automatic code signing with imported certificates"
+          security find-identity -v -p codesigning
           
       - name: Expo prebuild
         run: npx expo prebuild --platform ios --clean
@@ -61,7 +58,8 @@ jobs:
             -destination generic/platform=iOS \
             -archivePath DanceDate.xcarchive \
             CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM=RZ3LX2QC88
+            DEVELOPMENT_TEAM=RZ3LX2QC88 \
+            -allowProvisioningUpdates
             
       - name: Export IPA
         run: |
