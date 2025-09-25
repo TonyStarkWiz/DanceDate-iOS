@@ -1,4 +1,4 @@
-name: Production Build and Deploy to TestFlight
+name: Production Build and Deploy to TestFlight (Fixed)
 
 on:
   workflow_dispatch:
@@ -41,24 +41,57 @@ jobs:
       - name: Expo prebuild for Production
         run: npx expo prebuild --platform ios --clean
         
-      - name: Fix iOS Deployment Target
+      - name: Comprehensive iOS Deployment Target Fix
         run: |
           cd ios
-          echo "🔧 Fixing deployment targets for production..."
-          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 9.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} \;
-          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} \;
-          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 11.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} \;
-          echo "✅ Deployment targets updated"
+          echo "🔧 Comprehensive deployment target fixes..."
           
-      - name: Install CocoaPods
-        run: |
-          cd ios
-          pod install --repo-update
+          # Fix all possible deployment target values
+          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 9\.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} \;
+          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10\.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} \;
+          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 11\.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} \;
+          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 12\.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} \;
           
-      - name: Build Archive for App Store
+          # Also fix in Podfile
+          sed -i '' "s/platform :ios, '.*'/platform :ios, '13.0'/g" Podfile || true
+          
+          echo "✅ All deployment targets set to 13.0"
+          
+      - name: Clean and Install CocoaPods
         run: |
           cd ios
-          echo "🏗️ Building archive for App Store distribution..."
+          # Clean CocoaPods cache and reinstall
+          pod cache clean --all || true
+          rm -rf Pods/ Podfile.lock || true
+          pod install --repo-update --clean-install
+          
+      - name: Final Project Configuration
+        run: |
+          cd ios
+          echo "🔧 Final production configuration..."
+          
+          # Ensure proper team and signing settings
+          sed -i '' 's/DEVELOPMENT_TEAM = "";/DEVELOPMENT_TEAM = "RZ3LX2QC88";/g' DanceDate.xcodeproj/project.pbxproj || true
+          sed -i '' 's/CODE_SIGN_STYLE = Manual;/CODE_SIGN_STYLE = Automatic;/g' DanceDate.xcodeproj/project.pbxproj || true
+          
+          # Add provisioning profile settings
+          sed -i '' '/DEVELOPMENT_TEAM = "RZ3LX2QC88";/a\
+PROVISIONING_PROFILE_SPECIFIER = "";' DanceDate.xcodeproj/project.pbxproj || true
+          
+          echo "✅ Production configuration complete"
+          
+      - name: Build Archive for App Store (Robust)
+        run: |
+          cd ios
+          echo "🏗️ Building production archive..."
+          
+          # Clean build first
+          xcodebuild clean \
+            -workspace DanceDate.xcworkspace \
+            -scheme DanceDate \
+            -configuration Release
+          
+          # Build archive with comprehensive settings
           xcodebuild archive \
             -workspace DanceDate.xcworkspace \
             -scheme DanceDate \
@@ -67,31 +100,66 @@ jobs:
             -archivePath DanceDate.xcarchive \
             DEVELOPMENT_TEAM=RZ3LX2QC88 \
             CODE_SIGN_STYLE=Automatic \
-            -allowProvisioningUpdates
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath=$(pwd)/../AuthKey_Q7GZ89252A.p8 \
+            -authenticationKeyID=Q7GZ89252A \
+            -authenticationKeyIssuerID=dc671579-38b9-4e57-91dd-41ad841eeed6 \
+            OTHER_CODE_SIGN_FLAGS="--deep --force" \
+            GCC_OPTIMIZATION_LEVEL=0 \
+            SWIFT_OPTIMIZATION_LEVEL="-Onone"
             
+      - name: Verify Archive
+        run: |
+          cd ios
+          if [ -d "DanceDate.xcarchive" ]; then
+            echo "✅ Archive created successfully"
+            echo "📊 Archive contents:"
+            ls -la DanceDate.xcarchive/Products/Applications/
+          else
+            echo "❌ Archive creation failed!"
+            exit 1
+          fi
+          
+      - name: Create API Key File
+        run: |
+          echo "${{ secrets.APPSTORE_PRIVATE_KEY }}" | base64 -d > AuthKey_Q7GZ89252A.p8
+          chmod 600 AuthKey_Q7GZ89252A.p8
+          
       - name: Export IPA for App Store
         run: |
           cd ios
-          echo "📦 Exporting IPA for App Store submission..."
+          echo "📦 Exporting production IPA..."
           xcodebuild -exportArchive \
             -archivePath DanceDate.xcarchive \
             -exportPath exports \
-            -exportOptionsPlist ExportOptions.plist
+            -exportOptionsPlist ExportOptions.plist \
+            -authenticationKeyPath $(pwd)/../AuthKey_Q7GZ89252A.p8 \
+            -authenticationKeyID Q7GZ89252A \
+            -authenticationKeyIssuerID dc671579-38b9-4e57-91dd-41ad841eeed6
             
-      - name: Verify IPA Creation
+      - name: Verify and Upload to TestFlight
         run: |
           cd ios
-          echo "📱 Checking for IPA file..."
-          ls -la exports/
-          IPA_FILE=$(find exports -name "*.ipa" -type f | head -1)
-          echo "✅ IPA found: $IPA_FILE"
           
-      - name: Upload to TestFlight
-        run: |
-          cd ios
-          echo "🚀 Uploading to TestFlight..."
-          IPA_FILE=$(find exports -name "*.ipa" -type f | head -1)
+          # Verify IPA exists
+          if [ ! -d "exports" ]; then
+            echo "❌ Exports directory not found!"
+            exit 1
+          fi
           
+          IPA_FILE=$(find exports -name "*.ipa" -type f | head -1)
+          if [ -z "$IPA_FILE" ]; then
+            echo "❌ No IPA file found in exports!"
+            ls -la exports/
+            exit 1
+          fi
+          
+          echo "✅ Found IPA: $IPA_FILE"
+          echo "📊 IPA size: $(du -h "$IPA_FILE")"
+          
+          # Upload to TestFlight
+          echo "🚀 Uploading production build to TestFlight..."
           xcrun altool --upload-app \
             --type ios \
             --file "$IPA_FILE" \
@@ -99,8 +167,15 @@ jobs:
             --apiIssuer dc671579-38b9-4e57-91dd-41ad841eeed6 \
             --verbose
             
-      - name: Success
+      - name: Cleanup
+        if: always()
         run: |
-          echo "🎉 Production build v1.0.3 (12) uploaded to TestFlight!"
-          echo "📱 Check App Store Connect in 5-10 minutes"
-          echo "💰 FREE production deployment complete!"
+          rm -f AuthKey_Q7GZ89252A.p8 || true
+          
+      - name: Production Success
+        run: |
+          echo "🎉 PRODUCTION SUCCESS! DanceDate v1.0.3 (12) uploaded!"
+          echo "📱 Production build submitted to TestFlight"
+          echo "✈️ Check App Store Connect in 5-10 minutes"
+          echo "💰 FREE production deployment - $99/month saved!"
+          echo "🏆 Professional iOS CI/CD system complete!"
