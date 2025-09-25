@@ -1,10 +1,10 @@
-name: Build and Deploy to TestFlight (Local)
+name: Deploy to TestFlight
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: macos-latest
     
     steps:
@@ -39,7 +39,6 @@ jobs:
       - name: Fix iOS Deployment Target
         run: |
           cd ios
-          # Update deployment target to fix the 9.0 → 13.0 issue
           find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 9.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} \;
           find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} \;
           find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 11.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} \;
@@ -49,7 +48,7 @@ jobs:
           cd ios
           pod install --repo-update
           
-      - name: Build and Archive for TestFlight
+      - name: Build and Archive
         run: |
           cd ios
           xcodebuild archive \
@@ -62,7 +61,7 @@ jobs:
             CODE_SIGN_IDENTITY="Apple Distribution" \
             -allowProvisioningUpdates
             
-      - name: Export IPA for App Store
+      - name: Export IPA
         run: |
           cd ios
           xcodebuild -exportArchive \
@@ -79,10 +78,8 @@ jobs:
             --apiKey Q7GZ89252A \
             --apiIssuer dc671579-38b9-4e57-91dd-41ad841eeed6
             
-      - name: Success Notification
+      - name: Success
         run: |
-          echo "🎉 SUCCESS! DanceDate deployed to TestFlight!"
-          echo "📱 Check App Store Connect for your new build"
-          echo "✈️ TestFlight build processing now"
-          echo "💰 Deployed for FREE - no EAS costs!"
-          echo "🚀 Your unlimited FREE deployment system works!"
+          echo "🎉 DanceDate deployed to TestFlight!"
+          echo "📱 Check App Store Connect"
+          echo "💰 FREE deployment complete!"
