@@ -1,85 +1,25 @@
-name: Deploy to TestFlight
-
-on:
-  workflow_dispatch:
-
-jobs:
-  deploy:
-    runs-on: macos-latest
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          
-      - name: Install dependencies
-        run: npm ci
-        
-      - name: Install Expo CLI
-        run: npm install -g @expo/cli
-        
-      - name: Create missing assets
-        run: |
-          mkdir -p assets/sounds
-          touch assets/sounds/notification.wav
-          
-      - name: Import Code-Signing Certificates
-        uses: Apple-Actions/import-codesign-certs@v2
-        with:
-          p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
-          p12-password: ${{ secrets.CERTIFICATES_P12_PASSWORD }}
-          
-      - name: Expo prebuild
-        run: npx expo prebuild --platform ios --clean
-        
-      - name: Fix iOS Deployment Target
+  - name: Upload to TestFlight (Improved)
         run: |
           cd ios
-          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 9.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} \;
-          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} \;
-          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 11.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} \;
+          # List files to debug
+          echo "📁 Files in ios directory:"
+          ls -la
+          echo "📁 Files in exports directory:"
+          ls -la exports/ || echo "No exports directory"
           
-      - name: Install CocoaPods
-        run: |
-          cd ios
-          pod install --repo-update
+          # Find IPA file
+          IPA_FILE=$(find . -name "*.ipa" -type f | head -1)
+          echo "📱 Found IPA: $IPA_FILE"
           
-      - name: Build and Archive
-        run: |
-          cd ios
-          xcodebuild archive \
-            -workspace DanceDate.xcworkspace \
-            -scheme DanceDate \
-            -configuration Release \
-            -destination generic/platform=iOS \
-            -archivePath DanceDate.xcarchive \
-            DEVELOPMENT_TEAM=RZ3LX2QC88 \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            -allowProvisioningUpdates
-            
-      - name: Export IPA
-        run: |
-          cd ios
-          xcodebuild -exportArchive \
-            -archivePath DanceDate.xcarchive \
-            -exportPath exports \
-            -exportOptionsPlist ExportOptions.plist
-            
-      - name: Upload to TestFlight
-        run: |
-          cd ios/exports
-          xcrun altool --upload-app \
-            --type ios \
-            --file *.ipa \
-            --apiKey Q7GZ89252A \
-            --apiIssuer dc671579-38b9-4e57-91dd-41ad841eeed6
-            
-      - name: Success
-        run: |
-          echo "🎉 DanceDate deployed to TestFlight!"
-          echo "📱 Check App Store Connect"
-          echo "💰 FREE deployment complete!"
+          if [ -n "$IPA_FILE" ]; then
+            echo "🚀 Uploading $IPA_FILE to TestFlight..."
+            xcrun altool --upload-app \
+              --type ios \
+              --file "$IPA_FILE" \
+              --apiKey Q7GZ89252A \
+              --apiIssuer dc671579-38b9-4e57-91dd-41ad841eeed6 \
+              --verbose
+          else
+            echo "❌ No IPA file found!"
+            exit 1
+          fi
