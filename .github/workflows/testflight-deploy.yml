@@ -1,4 +1,4 @@
-name: Deploy to TestFlight (With Signing)
+name: Deploy to TestFlight (Fixed)
 
 on:
   workflow_dispatch:
@@ -35,25 +35,21 @@ jobs:
           p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
           p12-password: ${{ secrets.CERTIFICATES_P12_PASSWORD }}
           
-      - name: Create provisioning profile
-        run: |
-          echo "Creating ad hoc provisioning profile"
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          
       - name: Expo prebuild
         run: npx expo prebuild --platform ios --clean
         
+      - name: Update iOS Deployment Target
+        run: |
+          cd ios
+          # Fix deployment target to 13.0
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 9.0;/IPHONEOS_DEPLOYMENT_TARGET = 13.0;/g' Pods/Pods.xcodeproj/project.pbxproj
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0;/IPHONEOS_DEPLOYMENT_TARGET = 13.0;/g' Pods/Pods.xcodeproj/project.pbxproj
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 11.0;/IPHONEOS_DEPLOYMENT_TARGET = 13.0;/g' Pods/Pods.xcodeproj/project.pbxproj
+          
       - name: Install CocoaPods
         run: |
           cd ios
           pod install --repo-update
-          
-      - name: Update project settings for manual signing
-        run: |
-          cd ios
-          # Update project settings to use manual code signing
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' DanceDate.xcodeproj/project.pbxproj
-          sed -i '' 's/DEVELOPMENT_TEAM = "";/DEVELOPMENT_TEAM = "RZ3LX2QC88";/g' DanceDate.xcodeproj/project.pbxproj
           
       - name: Build iOS Archive
         run: |
@@ -64,13 +60,9 @@ jobs:
             -configuration Release \
             -destination generic/platform=iOS \
             -archivePath DanceDate.xcarchive \
-            CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM=RZ3LX2QC88 \
-            CODE_SIGN_IDENTITY="Apple Distribution: Anthony Espinoza (RZ3LX2QC88)" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath=${{ github.workspace }}/AuthKey_Q7GZ89252A.p8 \
-            -authenticationKeyID=Q7GZ89252A \
-            -authenticationKeyIssuerID=dc671579-38b9-4e57-91dd-41ad841eeed6
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            -allowProvisioningUpdates
             
       - name: Export IPA
         run: |
@@ -80,14 +72,12 @@ jobs:
             -exportPath . \
             -exportOptionsPlist ExportOptions.plist
             
-      - name: Upload to TestFlight
+      - name: Upload to TestFlight using altool
         run: |
           cd ios
           xcrun altool --upload-app \
             --type ios \
             --file DanceDate.ipa \
-            --username anthonyespinosa33891@gmail.com \
-            --password ${{ secrets.APP_SPECIFIC_PASSWORD }} \
             --apiKey Q7GZ89252A \
             --apiIssuer dc671579-38b9-4e57-91dd-41ad841eeed6
             
