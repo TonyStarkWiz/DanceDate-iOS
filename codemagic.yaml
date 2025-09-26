@@ -35,28 +35,42 @@ workflows:
       - name: Install CocoaPods dependencies
         script: |
           cd ios && pod install --repo-update
-      - name: Create skeleton build
+      - name: Create minimal React Native build
         script: |
           cd ios
-          # Create a minimal skeleton build by removing problematic dependencies
-          echo "Creating skeleton build to test pipeline..."
+          # Create a minimal React Native build without Expo
+          echo "Creating minimal React Native build to test pipeline..."
           
-          # Remove problematic dependencies from package.json
+          # Remove all Expo dependencies and create minimal package.json
           cd ..
-          npm uninstall react-native-screens || true
-          npm uninstall react-native-reanimated || true
-          npm uninstall expo-camera || true
-          npm uninstall expo-image-picker || true
-          npm uninstall expo-location || true
-          npm uninstall expo-notifications || true
-          npm uninstall expo-apple-authentication || true
-          npm uninstall @react-native-google-signin/google-signin || true
-          npm uninstall react-native-purchases || true
-          npm uninstall react-native-purchases-ui || true
-          npm uninstall @stripe/stripe-react-native || true
-          npm uninstall firebase || true
-          npm uninstall firebase-admin || true
-          npm uninstall firebase-functions || true
+          cat > package.json << 'EOF'
+          {
+            "name": "dancedate-ios",
+            "version": "1.0.3",
+            "private": true,
+            "scripts": {
+              "start": "react-native start",
+              "ios": "react-native run-ios",
+              "android": "react-native run-android"
+            },
+            "dependencies": {
+              "react": "19.0.0",
+              "react-native": "0.79.5"
+            },
+            "devDependencies": {
+              "@babel/core": "^7.25.2",
+              "@babel/preset-env": "^7.25.2",
+              "@babel/runtime": "^7.25.2",
+              "babel-jest": "^29.7.0",
+              "jest": "^29.7.0",
+              "metro-react-native-babel-preset": "0.77.0",
+              "react-test-renderer": "19.0.0"
+            },
+            "jest": {
+              "preset": "react-native"
+            }
+          }
+          EOF
           
           # Clean and reinstall
           rm -rf node_modules
