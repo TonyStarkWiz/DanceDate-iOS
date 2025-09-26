@@ -9,6 +9,9 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.antho.dancedate
+        certificate_credential_type: app_store_connect_api_key
+        provisioning_profile_credential_type: app_store_connect_api_key
+        team_id: RZ3LX2QC88
       vars:
         BUNDLE_ID: "com.antho.dancedate"
         XCODE_WORKSPACE: "DanceDate.xcworkspace"
