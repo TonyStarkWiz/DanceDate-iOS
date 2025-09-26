@@ -38,9 +38,12 @@ workflows:
       - name: Fix RNScreens compilation issues
         script: |
           cd ios
-          # Fix RNScreens compilation by updating build settings
+          # Fix RNScreens compilation by updating build settings and disabling problematic warnings
           find . -name "*.pbxproj" -exec sed -i '' 's/CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES/CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = NO/g' {} \;
           find . -name "*.pbxproj" -exec sed -i '' 's/GCC_WARN_INHIBIT_ALL_WARNINGS = NO/GCC_WARN_INHIBIT_ALL_WARNINGS = YES/g' {} \;
+          find . -name "*.pbxproj" -exec sed -i '' 's/CLANG_WARN_DOCUMENTATION_COMMENTS = YES/CLANG_WARN_DOCUMENTATION_COMMENTS = NO/g' {} \;
+          find . -name "*.pbxproj" -exec sed -i '' 's/CLANG_WARN_STRICT_PROTOTYPES = YES/CLANG_WARN_STRICT_PROTOTYPES = NO/g' {} \;
+          find . -name "*.pbxproj" -exec sed -i '' 's/CLANG_WARN_SUSPICIOUS_IMPLICIT_CONVERSION = YES/CLANG_WARN_SUSPICIOUS_IMPLICIT_CONVERSION = NO/g' {} \;
       - name: Fix iOS deployment targets
         script: |
           cd ios
@@ -72,7 +75,11 @@ workflows:
             SWIFT_COMPILATION_MODE=wholemodule \
             SWIFT_OPTIMIZATION_LEVEL=-O \
             CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
-            GCC_WARN_INHIBIT_ALL_WARNINGS=YES
+            GCC_WARN_INHIBIT_ALL_WARNINGS=YES \
+            CLANG_WARN_DOCUMENTATION_COMMENTS=NO \
+            CLANG_WARN_STRICT_PROTOTYPES=NO \
+            CLANG_WARN_SUSPICIOUS_IMPLICIT_CONVERSION=NO \
+            ONLY_ACTIVE_ARCH=NO
           
           # Export IPA with absolute path to ExportOptions.plist
           xcodebuild -exportArchive \
