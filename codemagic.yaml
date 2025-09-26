@@ -15,7 +15,7 @@ workflows:
         BUNDLE_ID: "com.antho.dancedate"
         XCODE_WORKSPACE: "DanceDate.xcworkspace"
         XCODE_SCHEME: "DanceDate"
-      node: 18.17.0
+      node: 18.20.4
       xcode: 15.2
       cocoapods: default
     scripts:
@@ -89,7 +89,6 @@ workflows:
               :path => '../node_modules/react-native',
               :hermes_enabled => true,
               :fabric_enabled => false,
-              :flipper_configuration => false,
               :app_path => "#{Pod::Config.instance.installation_root}/.."
             )
 
