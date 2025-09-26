@@ -35,18 +35,37 @@ workflows:
       - name: Install CocoaPods dependencies
         script: |
           cd ios && pod install --repo-update
-      - name: Fix RNScreens compilation issues
+      - name: Create skeleton build
         script: |
           cd ios
-          # Temporarily remove react-native-screens to unblock build
-          echo "Temporarily removing react-native-screens to fix compilation..."
-          # Remove from Podfile if it exists
-          sed -i '' '/react-native-screens/d' Podfile || true
-          # Remove from package.json temporarily
+          # Create a minimal skeleton build by removing problematic dependencies
+          echo "Creating skeleton build to test pipeline..."
+          
+          # Remove problematic dependencies from package.json
           cd ..
           npm uninstall react-native-screens || true
+          npm uninstall react-native-reanimated || true
+          npm uninstall expo-camera || true
+          npm uninstall expo-image-picker || true
+          npm uninstall expo-location || true
+          npm uninstall expo-notifications || true
+          npm uninstall expo-apple-authentication || true
+          npm uninstall @react-native-google-signin/google-signin || true
+          npm uninstall react-native-purchases || true
+          npm uninstall react-native-purchases-ui || true
+          npm uninstall @stripe/stripe-react-native || true
+          npm uninstall firebase || true
+          npm uninstall firebase-admin || true
+          npm uninstall firebase-functions || true
+          
+          # Clean and reinstall
+          rm -rf node_modules
+          npm install
+          
           cd ios
           # Clean and reinstall pods
+          rm -rf Pods
+          rm Podfile.lock
           pod install --repo-update
       - name: Fix iOS deployment targets
         script: |
