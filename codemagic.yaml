@@ -7,10 +7,8 @@ workflows:
       app_store_connect: DanceDate iOS Production
     environment:
       ios_signing:
-        provisioning_profiles:
-          - DanceDate iOS App Store
-        certificates:
-          - DanceDate iOS Distribution
+        distribution_type: app_store
+        bundle_identifier: com.antho.dancedate
       vars:
         BUNDLE_ID: "com.antho.dancedate"
         XCODE_WORKSPACE: "DanceDate.xcworkspace"
@@ -36,14 +34,29 @@ workflows:
         script: |
           cd ios && pod install --repo-update
       - name: Set up code signing settings on Xcode project
-        script: xcode-project use-profiles
+        script: |
+          cd ios
+          xcode-project use-profiles
+          xcode-project set-settings --target DanceDate --setting CODE_SIGN_STYLE=Automatic
+          xcode-project set-settings --target DanceDate --setting DEVELOPMENT_TEAM=RZ3LX2QC88
       - name: Build ipa for distribution
         script: |
           cd ios
-          xcode-project build-ipa \
-            --workspace "$XCODE_WORKSPACE" \
-            --scheme "$XCODE_SCHEME" \
-            --config Release
+          # Build archive with automatic code signing
+          xcodebuild archive \
+            -workspace "$XCODE_WORKSPACE" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release \
+            -archivePath DanceDate.xcarchive \
+            DEVELOPMENT_TEAM=RZ3LX2QC88 \
+            CODE_SIGN_STYLE=Automatic \
+            -allowProvisioningUpdates
+          
+          # Export IPA
+          xcodebuild -exportArchive \
+            -archivePath DanceDate.xcarchive \
+            -exportPath exports \
+            -exportOptionsPlist ExportOptions.plist
     artifacts:
       - build/ios/ipa/*.ipa
       - ios/*.ipa
