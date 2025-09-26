@@ -7,8 +7,10 @@ workflows:
       app_store_connect: codemagic
     environment:
       ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.antho.dancedate
+        provisioning_profiles:
+          - DanceDate iOS AppStore
+        certificates:
+          - DanceDate iOS Distribution
       vars:
         BUNDLE_ID: "com.antho.dancedate"
         XCODE_WORKSPACE: "DanceDate.xcworkspace"
@@ -33,6 +35,8 @@ workflows:
       - name: Install CocoaPods dependencies
         script: |
           cd ios && pod install --repo-update
+      - name: Set up code signing settings on Xcode project
+        script: xcode-project use-profiles
       - name: Build ipa for distribution
         script: |
           cd ios
