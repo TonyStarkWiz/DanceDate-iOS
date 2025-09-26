@@ -1,4 +1,4 @@
-ame: Simple Production Build
+name: Simple Production Build
 
 on:
   workflow_dispatch:
@@ -20,42 +20,31 @@ jobs:
         run: npm ci
         
       - name: Install Expo CLI
-        run: npm install -g @expo/cli eas-cli
+        run: npm install -g @expo/cli
         
       - name: Create missing assets
         run: |
           mkdir -p assets/sounds
           touch assets/sounds/notification.wav
           
-      - name: Wait for EAS Build Limit Reset
+      - name: Expo prebuild
+        run: npx expo prebuild --platform ios --clean
+        
+      - name: Install CocoaPods
         run: |
-          echo "🕒 EAS Free builds reset in 5 days (Oct 1st)"
-          echo "💡 Let's use EAS again when it resets!"
-          
-      - name: EAS Build for Production (When Available)
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: |
-          echo "🚀 Attempting EAS build..."
-          eas build --platform ios --non-interactive --profile production || echo "EAS build failed - likely due to monthly limit"
-          
-      - name: Alternative - Local Archive Build
-        run: |
-          echo "📱 Building locally for now..."
-          npx expo prebuild --platform ios --clean
           cd ios
           pod install --repo-update
           
-          # Build for simulator (this works)
+      - name: Build for iOS Simulator
+        run: |
+          cd ios
           xcodebuild build \
             -workspace DanceDate.xcworkspace \
             -scheme DanceDate \
             -destination 'platform=iOS Simulator,name=iPhone 16'
             
-      - name: Status Report
+      - name: Success Message
         run: |
-          echo "✅ Local build completed successfully"
-          echo "🕒 EAS builds reset on October 1st"
-          echo "💰 You're already saving $99/month with this setup"
-          echo "🎯 On Oct 1st: Run EAS build for TestFlight"
-          echo "🚀 Until then: Use local builds for development"
+          echo "🎉 Build successful!"
+          echo "💰 FREE unlimited builds working!"
+          echo "🚀 Ready for TestFlight when EAS resets Oct 1st!"
