@@ -7,8 +7,10 @@ workflows:
       app_store_connect: DanceDate iOS Production
     environment:
       ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.antho.dancedate
+        provisioning_profiles:
+          - DanceDate iOS App Store
+        certificates:
+          - DanceDate iOS Distribution
       vars:
         BUNDLE_ID: "com.antho.dancedate"
         XCODE_WORKSPACE: "DanceDate.xcworkspace"
