@@ -48,53 +48,75 @@ workflows:
       - name: Clean Xcode DerivedData
         script: |
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
-      - name: Clean Codemagic caches and stale Pods
+      - name: ⚡ CI/CD Sanity: Nuclear clean of all build artifacts
         script: |
-          # Clean DerivedData and stale Pods to ensure Podfile changes apply
+          # Nuclear clean to prevent stale build settings from leaking in
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
-          rm -rf ios/Pods ios/Podfile.lock
+          cd ios && rm -rf Pods Podfile.lock build
           # Complete clean of all build artifacts and caches
           rm -rf node_modules
           rm -rf ~/Library/Caches/com.apple.dt.Xcode
           rm -rf ~/Library/Caches/CocoaPods
           # Reinstall with forced react-native-screens 3.31.1
           npm install
-      - name: Verify nuke solution C++17 settings
+      - name: ⚡ Patch RNScreens.podspec to hard-code C++17
+        script: |
+          # Nuclear option: patch the podspec directly to guarantee C++17
+          if [ -f "node_modules/react-native-screens/RNScreens.podspec" ]; then
+            echo "🔧 Patching RNScreens.podspec to hard-code C++17 settings..."
+            # Backup original podspec
+            cp node_modules/react-native-screens/RNScreens.podspec node_modules/react-native-screens/RNScreens.podspec.backup
+            # Add C++17 settings to podspec
+            sed -i '' '/s.pod_target_xcconfig = {/a\
+  "CLANG_CXX_LANGUAGE_STANDARD" => "c++17",\
+  "CLANG_CXX_LIBRARY" => "libc++"
+' node_modules/react-native-screens/RNScreens.podspec
+            echo "✅ RNScreens.podspec patched with C++17 settings"
+            # Verify the patch was applied
+            if grep -q "CLANG_CXX_LANGUAGE_STANDARD.*c++17" node_modules/react-native-screens/RNScreens.podspec; then
+              echo "✅ C++17 settings confirmed in podspec"
+            else
+              echo "⚠️ C++17 settings not found in podspec"
+            fi
+          else
+            echo "⚠️ RNScreens.podspec not found"
+          fi
+      - name: Verify next-level nuke C++17 settings
         script: |
           cd ios
           # Check react-native-screens version
           echo "📦 Checking react-native-screens version:"
           npm list react-native-screens
-          # Check if global C++17 nuke settings are present in Podfile
-          if grep -q "NUKE SOLUTION" Podfile; then
-            echo "✅ Global C++17 nuke settings found in Podfile"
-            grep -A 10 "NUKE SOLUTION" Podfile
+          # Check if explicit RNScreens targeting is present in Podfile
+          if grep -q "NEXT-LEVEL NUKE" Podfile; then
+            echo "✅ Next-level nuke settings found in Podfile"
+            grep -A 10 "NEXT-LEVEL NUKE" Podfile
           else
-            echo "⚠️ Global C++17 nuke settings not found in Podfile"
+            echo "⚠️ Next-level nuke settings not found in Podfile"
           fi
-      - name: Install CocoaPods with global C++17 nuke settings
+      - name: Install CocoaPods with next-level nuke settings
         script: |
           cd ios
-          # Install Pods with the updated Podfile that forces C++17 for ALL pods
+          # Install Pods with the patched podspec and explicit RNScreens targeting
           pod install --repo-update
-          # Verify the nuke solution was applied
-          echo "🔍 Verifying global C++17 nuke settings were applied:"
-          if grep -q "NUKE SOLUTION" Podfile; then
-            echo "✅ Podfile contains global C++17 nuke settings"
+          # Verify the next-level nuke solution was applied
+          echo "🔍 Verifying next-level nuke settings were applied:"
+          if grep -q "NEXT-LEVEL NUKE" Podfile; then
+            echo "✅ Podfile contains next-level nuke settings"
             # Show the actual nuke settings in the Podfile
-            grep -A 8 "NUKE SOLUTION" Podfile
+            grep -A 8 "NEXT-LEVEL NUKE" Podfile
           else
-            echo "❌ Podfile missing global C++17 nuke settings"
+            echo "❌ Podfile missing next-level nuke settings"
           fi
-          # Verify the settings were actually applied to ALL Pods targets
-          echo "🔍 Checking if C++17 nuke settings were applied to ALL Pods:"
+          # Verify the settings were actually applied to RNScreens target
+          echo "🔍 Checking if C++17 settings were applied to RNScreens:"
           if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
-            cpp17_count=$(grep -c "CLANG_CXX_LANGUAGE_STANDARD.*c\+\+17" Pods/Pods.xcodeproj/project.pbxproj || echo "0")
-            echo "✅ Found $cpp17_count C++17 settings in Pods project"
-            if [ "$cpp17_count" -gt "0" ]; then
-              echo "✅ Global C++17 nuke solution successfully applied"
+            rnscreens_cpp17_count=$(grep -c "RNScreens.*CLANG_CXX_LANGUAGE_STANDARD.*c\+\+17" Pods/Pods.xcodeproj/project.pbxproj || echo "0")
+            echo "✅ Found $rnscreens_cpp17_count C++17 settings for RNScreens in Pods project"
+            if [ "$rnscreens_cpp17_count" -gt "0" ]; then
+              echo "✅ Next-level nuke solution successfully applied to RNScreens"
             else
-              echo "⚠️ No C++17 settings found in Pods project"
+              echo "⚠️ No C++17 settings found for RNScreens in Pods project"
             fi
           fi
       - name: Create ExportOptions.plist
