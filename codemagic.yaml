@@ -18,114 +18,65 @@ workflows:
       node: 18.20.4
       xcode: 15.2
       cocoapods: default
+
     scripts:
       - name: Set environment overrides for C++17
         script: |
-          # ☢️ NUKE SOLUTION: Force Xcode to prefer C++17 globally
           export GCC_CXX_STANDARD=17
           export CLANG_CXX_LANGUAGE_STANDARD=c++17
           export CXXFLAGS="-std=c++17"
-          echo "🔧 Environment variables set to force C++17:"
-          echo "GCC_CXX_STANDARD=$GCC_CXX_STANDARD"
-          echo "CLANG_CXX_LANGUAGE_STANDARD=$CLANG_CXX_LANGUAGE_STANDARD"
-          echo "CXXFLAGS=$CXXFLAGS"
+          echo "🔧 Environment variables set to force C++17"
+
       - name: Install npm dependencies
-        script: |
-          npm install
+        script: npm install
+
       - name: Install Expo CLI
-        script: |
-          npm install -g @expo/cli
+        script: npm install -g @expo/cli
+
       - name: Create missing assets
         script: |
           mkdir -p assets/sounds
           touch assets/sounds/notification.wav
+
       - name: Expo prebuild
-        script: |
-          npx expo prebuild --platform ios --clean
+        script: npx expo prebuild --platform ios --clean
+
       - name: Install CocoaPods dependencies
         script: |
-          cd ios && pod install --repo-update
-      - name: Clean Xcode DerivedData
-        script: |
-          rm -rf ~/Library/Developer/Xcode/DerivedData/*
+          cd ios
+          pod install --repo-update
+
       - name: CI/CD Sanity Nuclear clean of all build artifacts
         script: |
-          # Nuclear clean to prevent stale build settings from leaking in
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
           cd ios && rm -rf Pods Podfile.lock build
-          # Complete clean of all build artifacts and caches
+          cd ..
           rm -rf node_modules
           rm -rf ~/Library/Caches/com.apple.dt.Xcode
           rm -rf ~/Library/Caches/CocoaPods
-          # Reinstall with forced react-native-screens 3.31.1
           npm install
+
       - name: Patch RNScreens.podspec to hard-code C++17
         script: |
-          # Nuclear option: patch the podspec directly to guarantee C++17
           if [ -f "node_modules/react-native-screens/RNScreens.podspec" ]; then
-            echo "🔧 Patching RNScreens.podspec to hard-code C++17 settings..."
-            # Backup original podspec
+            echo "🔧 Patching RNScreens.podspec..."
             cp node_modules/react-native-screens/RNScreens.podspec node_modules/react-native-screens/RNScreens.podspec.backup
-            # Create a temporary file with the C++17 settings
-            cat > /tmp/cpp17_settings.rb << 'EOF'
-  "CLANG_CXX_LANGUAGE_STANDARD" => "c++17",
-  "CLANG_CXX_LIBRARY" => "libc++"
-EOF
-            # Add C++17 settings to podspec
-            sed -i '' '/s.pod_target_xcconfig = {/r /tmp/cpp17_settings.rb' node_modules/react-native-screens/RNScreens.podspec
-            echo "✅ RNScreens.podspec patched with C++17 settings"
-            # Verify the patch was applied
-            if grep -q "CLANG_CXX_LANGUAGE_STANDARD.*c++17" node_modules/react-native-screens/RNScreens.podspec; then
-              echo "✅ C++17 settings confirmed in podspec"
-            else
-              echo "⚠️ C++17 settings not found in podspec"
-            fi
+            # Insert C++17 settings into podspec
+            sed -i.bak 's/{/{ "CLANG_CXX_LANGUAGE_STANDARD" => "c++17", "CLANG_CXX_LIBRARY" => "libc++",/' node_modules/react-native-screens/RNScreens.podspec
+            grep "CLANG_CXX_LANGUAGE_STANDARD" node_modules/react-native-screens/RNScreens.podspec || echo "⚠️ Patch failed"
           else
             echo "⚠️ RNScreens.podspec not found"
           fi
-      - name: Verify next-level nuke C++17 settings
+
+      - name: Install CocoaPods with patched podspec
         script: |
           cd ios
-          # Check react-native-screens version
-          echo "📦 Checking react-native-screens version:"
-          npm list react-native-screens
-          # Check if explicit RNScreens targeting is present in Podfile
-          if grep -q "NEXT-LEVEL NUKE" Podfile; then
-            echo "✅ Next-level nuke settings found in Podfile"
-            grep -A 10 "NEXT-LEVEL NUKE" Podfile
-          else
-            echo "⚠️ Next-level nuke settings not found in Podfile"
-          fi
-      - name: Install CocoaPods with next-level nuke settings
-        script: |
-          cd ios
-          # Install Pods with the patched podspec and explicit RNScreens targeting
           pod install --repo-update
-          # Verify the next-level nuke solution was applied
-          echo "🔍 Verifying next-level nuke settings were applied:"
-          if grep -q "NEXT-LEVEL NUKE" Podfile; then
-            echo "✅ Podfile contains next-level nuke settings"
-            # Show the actual nuke settings in the Podfile
-            grep -A 8 "NEXT-LEVEL NUKE" Podfile
-          else
-            echo "❌ Podfile missing next-level nuke settings"
-          fi
-          # Verify the settings were actually applied to RNScreens target
-          echo "🔍 Checking if C++17 settings were applied to RNScreens:"
-          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
-            rnscreens_cpp17_count=$(grep -c "RNScreens.*CLANG_CXX_LANGUAGE_STANDARD.*c\+\+17" Pods/Pods.xcodeproj/project.pbxproj || echo "0")
-            echo "✅ Found $rnscreens_cpp17_count C++17 settings for RNScreens in Pods project"
-            if [ "$rnscreens_cpp17_count" -gt "0" ]; then
-              echo "✅ Next-level nuke solution successfully applied to RNScreens"
-            else
-              echo "⚠️ No C++17 settings found for RNScreens in Pods project"
-            fi
-          fi
+
       - name: Create ExportOptions.plist
         script: |
           cd ios
-          # Create ExportOptions.plist for IPA export
-          cat > ExportOptions.plist << "EOF"
+          cat > ExportOptions.plist <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -143,38 +94,38 @@ EOF
           </dict>
           </plist>
           EOF
+
       - name: Fix iOS deployment targets
         script: |
           cd ios
-          # Fix deployment target warnings by setting minimum iOS version
-          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*;/IPHONEOS_DEPLOYMENT_TARGET = 13.0;/g' {} \;
+          find . -name "*.pbxproj" -exec sed -i.bak 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 13.0/' {} \;
+
       - name: Set up code signing settings on Xcode project
         script: |
           cd ios
           xcode-project use-profiles
-      - name: Final clean before archive
-        script: |
-          # Final cleanup to ensure no cached build settings
-          rm -rf ~/Library/Developer/Xcode/DerivedData/*
-          rm -rf ~/Library/Caches/com.apple.dt.Xcode
-          rm -rf ~/Library/Caches/CocoaPods
-          # Verify clean state
-          echo "🧹 Cleanup complete - no cached build settings should remain"
+
       - name: Build ipa for distribution
         script: |
           cd ios
-          # Clean build folder first
           xcodebuild clean -workspace "$XCODE_WORKSPACE" -scheme "$XCODE_SCHEME" -configuration Release
-          
-          # Build archive with automatic code signing and compilation fixes
-          xcodebuild archive -workspace "$XCODE_WORKSPACE" -scheme "$XCODE_SCHEME" -configuration Release -archivePath DanceDate.xcarchive DEVELOPMENT_TEAM=RZ3LX2QC88 CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates COMPILER_INDEX_STORE_ENABLE=NO SWIFT_COMPILATION_MODE=wholemodule SWIFT_OPTIMIZATION_LEVEL=-O CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO GCC_WARN_INHIBIT_ALL_WARNINGS=YES CLANG_WARN_DOCUMENTATION_COMMENTS=NO CLANG_WARN_STRICT_PROTOTYPES=NO CLANG_WARN_SUSPICIOUS_IMPLICIT_CONVERSION=NO ONLY_ACTIVE_ARCH=NO
-          
-          # Export IPA with absolute path to ExportOptions.plist
-          xcodebuild -exportArchive -archivePath DanceDate.xcarchive -exportPath exports -exportOptionsPlist "$(pwd)/ExportOptions.plist"
+          xcodebuild archive \
+            -workspace "$XCODE_WORKSPACE" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release \
+            -archivePath DanceDate.xcarchive \
+            DEVELOPMENT_TEAM=RZ3LX2QC88 \
+            CODE_SIGN_STYLE=Automatic \
+            -allowProvisioningUpdates \
+            COMPILER_INDEX_STORE_ENABLE=NO
+          xcodebuild -exportArchive \
+            -archivePath DanceDate.xcarchive \
+            -exportPath exports \
+            -exportOptionsPlist "$(pwd)/ExportOptions.plist"
+
     artifacts:
-      - build/ios/ipa/*.ipa
-      - ios/*.ipa
-      - /tmp/xcodebuild_logs/*.log
+      - ios/exports/*.ipa
+
     publishing:
       app_store_connect:
         auth: integration
