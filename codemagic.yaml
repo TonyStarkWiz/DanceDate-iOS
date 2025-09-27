@@ -52,7 +52,17 @@ workflows:
             echo "Looking for: CLANG_CXX_LANGUAGE_STANDARD = 'c++17'"
             echo "Current Podfile content:"
             cat Podfile
-            exit 1
+            echo "Adding C++17 settings to Podfile..."
+            # Add C++17 settings to existing post_install block
+            sed -i '' '/end$/i\
+    # Force C++17 for react-native-screens Objective-C++ sources\
+    installer.pods_project.targets.each do |target|\
+      target.build_configurations.each do |config|\
+        config.build_settings['"'"'CLANG_CXX_LANGUAGE_STANDARD'"'"'] = '"'"'c++17'"'"'\
+        config.build_settings['"'"'CLANG_CXX_LIBRARY'"'"'] = '"'"'libc++'"'"'\
+      end\
+    end' Podfile
+            echo "✅ C++17 settings added to Podfile"
           else
             echo "✅ C++17 settings found in Podfile"
           fi
