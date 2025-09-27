@@ -1,145 +1,44 @@
 workflows:
-  ios-testflight:
-    name: DanceDate iOS TestFlight Deploy
-    max_build_duration: 120
-    instance_type: mac_mini_m1
-    integrations:
-      app_store_connect: DanceDate iOS Production
+  ios-release:
+    name: iOS Release Build
     environment:
       ios_signing:
-        provisioning_profiles:
-          - "[expo] com.antho.dancedate AppStore"
+        distribution_type: app_store
+        bundle_identifier: "com.antho.dancedate"
         certificates:
-          - DanceDate iOS Distribution
+          - DD_iOS_AppStore_Distribution2
+        provisioning_profiles:
+          - DanceDate iOS App Store
       vars:
-        BUNDLE_ID: "com.antho.dancedate"
         XCODE_WORKSPACE: "DanceDate.xcworkspace"
         XCODE_SCHEME: "DanceDate"
-      node: 18.20.4
-      xcode: 15.2
-      cocoapods: default
     scripts:
-      - name: Set environment overrides for C++17
+      - name: Install dependencies
         script: |
-          export GCC_CXX_STANDARD=17
-          export CLANG_CXX_LANGUAGE_STANDARD=gnu++17
-          export CXXFLAGS="-std=gnu++17"
-          echo "🔧 Forced C++17 globally"
-
-      - name: Install npm dependencies
-        script: npm install
-
-      - name: Install Expo CLI
-        script: npm install -g @expo/cli
-
-      - name: Create missing assets
-        script: |
-          mkdir -p assets/sounds
-          touch assets/sounds/notification.wav
-
-      - name: Expo prebuild
-        script: npx expo prebuild --platform ios --clean
-
-      - name: Install CocoaPods dependencies
-        script: |
-          cd ios && pod install --repo-update
-
-      - name: Clean Xcode DerivedData
-        script: rm -rf ~/Library/Developer/Xcode/DerivedData/*
-
-      - name: Nuclear clean of all build artifacts
-        script: |
-          rm -rf ~/Library/Developer/Xcode/DerivedData/*
-          cd ios && rm -rf Pods Podfile.lock build
-          rm -rf node_modules
-          rm -rf ~/Library/Caches/com.apple.dt.Xcode
-          rm -rf ~/Library/Caches/CocoaPods
           npm install
-
-      - name: Patch RNScreens.podspec for C++17
+          npx pod-install ios
+      - name: Build iOS Release
         script: |
-          if [ -f "node_modules/react-native-screens/RNScreens.podspec" ]; then
-            echo "🔧 Patching RNScreens.podspec..."
-            cp node_modules/react-native-screens/RNScreens.podspec node_modules/react-native-screens/RNScreens.podspec.backup
-            sed -i '' '/s.pod_target_xcconfig/ a\
-              s.pod_target_xcconfig = { "CLANG_CXX_LANGUAGE_STANDARD" => "gnu++17", "CLANG_CXX_LIBRARY" => "libc++" }\
-            ' node_modules/react-native-screens/RNScreens.podspec
-            echo "✅ Patched RNScreens.podspec with C++17"
-          fi
-
-      - name: Reinstall Pods with patched RNScreens
-        script: |
-          cd ios
-          pod install --repo-update
-
-      - name: Create ExportOptions.plist
-        script: |
-          cd ios
-          cat > ExportOptions.plist << "EOF"
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>method</key>
-              <string>app-store</string>
-              <key>uploadBitcode</key>
-              <false/>
-              <key>uploadSymbols</key>
-              <true/>
-              <key>compileBitcode</key>
-              <false/>
-              <key>teamID</key>
-              <string>RZ3LX2QC88</string>
-              <key>provisioningProfiles</key>
-              <dict>
-                  <key>com.antho.dancedate</key>
-                  <string>[expo] com.antho.dancedate AppStore</string>
-              </dict>
-          </dict>
-          </plist>
-          EOF
-
-      - name: Fix iOS deployment targets
-        script: |
-          cd ios
-          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} \;
-
-      - name: Final clean before archive
-        script: |
-          rm -rf ~/Library/Developer/Xcode/DerivedData/*
-          rm -rf ~/Library/Caches/com.apple.dt.Xcode
-          rm -rf ~/Library/Caches/CocoaPods
-          echo "🧹 Final clean done"
-
-      - name: Build ipa for distribution
-        script: |
-          cd ios
-          xcodebuild clean -workspace "$XCODE_WORKSPACE" -scheme "$XCODE_SCHEME" -configuration Release
-
-          xcodebuild archive \
+          xcodebuild \
             -workspace "$XCODE_WORKSPACE" \
             -scheme "$XCODE_SCHEME" \
             -configuration Release \
-            -archivePath DanceDate.xcarchive \
-            DEVELOPMENT_TEAM=RZ3LX2QC88 \
-            CODE_SIGN_STYLE=Manual \
-            PROVISIONING_PROFILE_SPECIFIER="[expo] com.antho.dancedate AppStore" \
-            OTHER_CPLUSPLUSFLAGS=-std=gnu++17 \
-            CLANG_CXX_LANGUAGE_STANDARD=gnu++17 \
-            CLANG_CXX_LIBRARY=libc++
-
-          xcodebuild -exportArchive \
-            -archivePath DanceDate.xcarchive \
-            -exportPath exports \
-            -exportOptionsPlist "$(pwd)/ExportOptions.plist"
-
+            -sdk iphoneos \
+            -archivePath $CM_BUILD_DIR/DanceDate.xcarchive \
+            archive DEVELOPMENT_TEAM=RZ3LX2QC88 CODE_SIGN_STYLE=Manual
+      - name: Export .ipa
+        script: |
+          xcodebuild \
+            -exportArchive \
+            -archivePath $CM_BUILD_DIR/DanceDate.xcarchive \
+            -exportOptionsPlist ios/exportOptions.plist \
+            -exportPath $CM_BUILD_DIR
     artifacts:
-      - build/ios/ipa/*.ipa
-      - ios/*.ipa
-      - /tmp/xcodebuild_logs/*.log
-
+      - $CM_BUILD_DIR/*.ipa
+      - $CM_BUILD_DIR/*.dSYM.zip
     publishing:
       app_store_connect:
-        auth: integration
+        api_key: $APPSTORE_KEY_ID
+        issuer_id: $APPSTORE_ISSUER_ID
+        private_key: $APPSTORE_PRIVATE_KEY
         submit_to_testflight: true
-        submit_to_app_store: false
