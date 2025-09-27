@@ -18,62 +18,26 @@ workflows:
       node: 18.20.4
       xcode: 15.2
       cocoapods: default
-
     scripts:
-      - name: Set environment overrides for C++17
-        script: |
-          export GCC_CXX_STANDARD=17
-          export CLANG_CXX_LANGUAGE_STANDARD=gnu++17
-          export CXXFLAGS="-std=gnu++17"
-
       - name: Install npm dependencies
-        script: npm install
-
+        script: |
+          npm install
       - name: Install Expo CLI
-        script: npm install -g @expo/cli
-
+        script: |
+          npm install -g @expo/cli
       - name: Create missing assets
         script: |
           mkdir -p assets/sounds
           touch assets/sounds/notification.wav
-
       - name: Expo prebuild
-        script: npx expo prebuild --platform ios --clean
-
-      - name: Clean caches & reinstall
+        script: |
+          npx expo prebuild --platform ios --clean
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios && pod install --repo-update
+      - name: Clean Xcode DerivedData
         script: |
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
-          cd ios && rm -rf Pods Podfile.lock build && cd ..
-          rm -rf ~/Library/Caches/com.apple.dt.Xcode ~/Library/Caches/CocoaPods
-          rm -rf node_modules
-          npm install
-
-      - name: Patch RNScreens.podspec to force C++17 (YAML-safe)
-        script: |
-          PODSPEC="node_modules/react-native-screens/RNScreens.podspec"
-          if [ -f "$PODSPEC" ]; then
-            echo "🔧 Patching $PODSPEC"
-            cp "$PODSPEC" "$PODSPEC.backup"
-            {
-              printf "\n"
-              printf "# >>> Codemagic patch to force C++17 <<<\n"
-              printf "s.pod_target_xcconfig = {\n"
-              printf "  'CLANG_CXX_LANGUAGE_STANDARD' => 'gnu++17',\n"
-              printf "  'CLANG_CXX_LIBRARY' => 'libc++',\n"
-              printf "  'OTHER_CPLUSPLUSFLAGS' => '-std=gnu++17'\n"
-              printf "}\n"
-              printf "# <<< End Codemagic patch >>>\n"
-            } >> "$PODSPEC"
-            echo "✅ Patch appended"
-          else
-            echo "⚠️ RNScreens.podspec not found"
-          fi
-
-      - name: Install CocoaPods
-        script: |
-          cd ios
-          pod install --repo-update
-
       - name: Create ExportOptions.plist
         script: |
           cd ios
@@ -95,17 +59,20 @@ workflows:
           </dict>
           </plist>
           EOF
-
       - name: Fix iOS deployment targets
         script: |
           cd ios
-          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*;/IPHONEOS_DEPLOYMENT_TARGET = 13.0;/g' {} \;
-
-      - name: Set up code signing
+          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 13.0/' {} \;
+      - name: Set up code signing settings on Xcode project
         script: |
           cd ios
           xcode-project use-profiles
-
+      - name: Final clean before archive
+        script: |
+          rm -rf ~/Library/Developer/Xcode/DerivedData/*
+          rm -rf ~/Library/Caches/com.apple.dt.Xcode
+          rm -rf ~/Library/Caches/CocoaPods
+          echo "🧹 Final cleanup complete"
       - name: Build ipa for distribution
         script: |
           cd ios
@@ -119,17 +86,16 @@ workflows:
             CODE_SIGN_STYLE=Automatic \
             -allowProvisioningUpdates \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            ONLY_ACTIVE_ARCH=NO
+            SWIFT_COMPILATION_MODE=wholemodule \
+            SWIFT_OPTIMIZATION_LEVEL=-O
           xcodebuild -exportArchive \
             -archivePath DanceDate.xcarchive \
             -exportPath exports \
             -exportOptionsPlist "$(pwd)/ExportOptions.plist"
-
     artifacts:
       - build/ios/ipa/*.ipa
       - ios/*.ipa
       - /tmp/xcodebuild_logs/*.log
-
     publishing:
       app_store_connect:
         auth: integration
