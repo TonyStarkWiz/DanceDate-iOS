@@ -3,7 +3,7 @@ workflows:
     name: DanceDate iOS TestFlight Deploy
     environment:
       groups:
-        - app_store_connect
+        - app_store_credentials   # ✅ matches the group name in your screenshot
       ios_signing:
         certificates:
           - DD_iOS_AppStore_Distribution2
