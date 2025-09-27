@@ -48,7 +48,7 @@ workflows:
       - name: Clean Xcode DerivedData
         script: |
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
-      - name: ⚡ CI/CD Sanity: Nuclear clean of all build artifacts
+      - name: CI/CD Sanity Nuclear clean of all build artifacts
         script: |
           # Nuclear clean to prevent stale build settings from leaking in
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
@@ -59,7 +59,7 @@ workflows:
           rm -rf ~/Library/Caches/CocoaPods
           # Reinstall with forced react-native-screens 3.31.1
           npm install
-      - name: ⚡ Patch RNScreens.podspec to hard-code C++17
+      - name: Patch RNScreens.podspec to hard-code C++17
         script: |
           # Nuclear option: patch the podspec directly to guarantee C++17
           if [ -f "node_modules/react-native-screens/RNScreens.podspec" ]; then
@@ -123,7 +123,7 @@ workflows:
         script: |
           cd ios
           # Create ExportOptions.plist for IPA export
-          cat > ExportOptions.plist << 'EOF'
+          cat > ExportOptions.plist << "EOF"
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -162,35 +162,13 @@ workflows:
         script: |
           cd ios
           # Clean build folder first
-          xcodebuild clean \
-            -workspace "$XCODE_WORKSPACE" \
-            -scheme "$XCODE_SCHEME" \
-            -configuration Release
+          xcodebuild clean -workspace "$XCODE_WORKSPACE" -scheme "$XCODE_SCHEME" -configuration Release
           
           # Build archive with automatic code signing and compilation fixes
-          xcodebuild archive \
-            -workspace "$XCODE_WORKSPACE" \
-            -scheme "$XCODE_SCHEME" \
-            -configuration Release \
-            -archivePath DanceDate.xcarchive \
-            DEVELOPMENT_TEAM=RZ3LX2QC88 \
-            CODE_SIGN_STYLE=Automatic \
-            -allowProvisioningUpdates \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            SWIFT_COMPILATION_MODE=wholemodule \
-            SWIFT_OPTIMIZATION_LEVEL=-O \
-            CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
-            GCC_WARN_INHIBIT_ALL_WARNINGS=YES \
-            CLANG_WARN_DOCUMENTATION_COMMENTS=NO \
-            CLANG_WARN_STRICT_PROTOTYPES=NO \
-            CLANG_WARN_SUSPICIOUS_IMPLICIT_CONVERSION=NO \
-            ONLY_ACTIVE_ARCH=NO
+          xcodebuild archive -workspace "$XCODE_WORKSPACE" -scheme "$XCODE_SCHEME" -configuration Release -archivePath DanceDate.xcarchive DEVELOPMENT_TEAM=RZ3LX2QC88 CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates COMPILER_INDEX_STORE_ENABLE=NO SWIFT_COMPILATION_MODE=wholemodule SWIFT_OPTIMIZATION_LEVEL=-O CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO GCC_WARN_INHIBIT_ALL_WARNINGS=YES CLANG_WARN_DOCUMENTATION_COMMENTS=NO CLANG_WARN_STRICT_PROTOTYPES=NO CLANG_WARN_SUSPICIOUS_IMPLICIT_CONVERSION=NO ONLY_ACTIVE_ARCH=NO
           
           # Export IPA with absolute path to ExportOptions.plist
-          xcodebuild -exportArchive \
-            -archivePath DanceDate.xcarchive \
-            -exportPath exports \
-            -exportOptionsPlist "$(pwd)/ExportOptions.plist"
+          xcodebuild -exportArchive -archivePath DanceDate.xcarchive -exportPath exports -exportOptionsPlist "$(pwd)/ExportOptions.plist"
     artifacts:
       - build/ios/ipa/*.ipa
       - ios/*.ipa
