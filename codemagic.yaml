@@ -4,14 +4,17 @@ workflows:
     max_build_duration: 120
     environment:
       groups:
-        - app_store_credentials # APPSTORE_KEY_ID, APPSTORE_ISSUER_ID, APPSTORE_PRIVATE_KEY
+        - app_store_credentials
       ios_signing:
         certificates:
           - DD_iOS_AppStore_Distribution2
         provisioning_profiles:
           - DanceDate iOS App Store
     scripts:
-      - name: Install dependencies
+      - name: Install Node.js dependencies
+        script: |
+          npm install
+      - name: Install iOS dependencies
         script: |
           cd ios
           pod install --repo-update
