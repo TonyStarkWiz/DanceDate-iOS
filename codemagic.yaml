@@ -47,8 +47,11 @@ workflows:
         script: |
           cd ios
           # Verify that Podfile already has C++17 settings merged into existing post_install
-          if ! grep -q "CLANG_CXX_LANGUAGE_STANDARD.*c++17" Podfile; then
+          if ! grep -q "CLANG_CXX_LANGUAGE_STANDARD.*=.*'c++17'" Podfile; then
             echo "❌ C++17 settings not found in Podfile"
+            echo "Looking for: CLANG_CXX_LANGUAGE_STANDARD = 'c++17'"
+            echo "Current Podfile content:"
+            cat Podfile
             exit 1
           else
             echo "✅ C++17 settings found in Podfile"
