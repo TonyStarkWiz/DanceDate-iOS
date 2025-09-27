@@ -18,12 +18,13 @@ workflows:
       node: 18.20.4
       xcode: 15.2
       cocoapods: default
+
     scripts:
       - name: Set environment overrides for C++17
         script: |
           export GCC_CXX_STANDARD=17
-          export CLANG_CXX_LANGUAGE_STANDARD=c++17
-          export CXXFLAGS="-std=c++17"
+          export CLANG_CXX_LANGUAGE_STANDARD=gnu++17
+          export CXXFLAGS="-std=gnu++17"
 
       - name: Install npm dependencies
         script: npm install
@@ -39,29 +40,31 @@ workflows:
       - name: Expo prebuild
         script: npx expo prebuild --platform ios --clean
 
-      - name: Clean all caches
+      - name: Clean caches & reinstall
         script: |
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
-          cd ios && rm -rf Pods Podfile.lock build
+          cd ios && rm -rf Pods Podfile.lock build && cd ..
+          rm -rf ~/Library/Caches/com.apple.dt.Xcode ~/Library/Caches/CocoaPods
           rm -rf node_modules
-          rm -rf ~/Library/Caches/com.apple.dt.Xcode
-          rm -rf ~/Library/Caches/CocoaPods
           npm install
 
-      - name: Patch RNScreens.podspec to force C++17
+      - name: Patch RNScreens.podspec to force C++17 (YAML-safe)
         script: |
-          if [ -f "node_modules/react-native-screens/RNScreens.podspec" ]; then
-            echo "🔧 Patching RNScreens.podspec..."
-            cp node_modules/react-native-screens/RNScreens.podspec node_modules/react-native-screens/RNScreens.podspec.backup
-            cat <<'EOF' >> node_modules/react-native-screens/RNScreens.podspec
-
-  # >>> Codemagic patch to force C++17 <<<
-  s.pod_target_xcconfig = {
-    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
-    'CLANG_CXX_LIBRARY' => 'libc++'
-  }
-  # <<< End Codemagic patch >>>
-EOF
+          PODSPEC="node_modules/react-native-screens/RNScreens.podspec"
+          if [ -f "$PODSPEC" ]; then
+            echo "🔧 Patching $PODSPEC"
+            cp "$PODSPEC" "$PODSPEC.backup"
+            {
+              printf "\n"
+              printf "# >>> Codemagic patch to force C++17 <<<\n"
+              printf "s.pod_target_xcconfig = {\n"
+              printf "  'CLANG_CXX_LANGUAGE_STANDARD' => 'gnu++17',\n"
+              printf "  'CLANG_CXX_LIBRARY' => 'libc++',\n"
+              printf "  'OTHER_CPLUSPLUSFLAGS' => '-std=gnu++17'\n"
+              printf "}\n"
+              printf "# <<< End Codemagic patch >>>\n"
+            } >> "$PODSPEC"
+            echo "✅ Patch appended"
           else
             echo "⚠️ RNScreens.podspec not found"
           fi
