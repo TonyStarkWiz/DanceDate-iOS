@@ -26,12 +26,15 @@ workflows:
         script: |
           cd ios
           pod install --repo-update
+      - name: Debug Xcode project detection
+        script: |
+          echo "🔍 Checking available workspaces and schemes..."
+          ls ios/*.xcworkspace
+          cd ios && xcodebuild -list
       - name: Build iOS IPA
         script: |
-          xcode-project use-profiles \
-            --workspace "ios/$XCODE_WORKSPACE" \
-            --scheme "$XCODE_SCHEME" \
-            --config Release
+          # Let codemagic’s xcode-project use-profiles handle signing + build
+          xcode-project use-profiles
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
