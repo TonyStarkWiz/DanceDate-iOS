@@ -38,16 +38,30 @@ workflows:
       - name: Clean Xcode DerivedData
         script: |
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
-      - name: Align react-native-screens version
+      - name: Force modern react-native-screens version
         script: |
-          # Update react-native-screens to compatible version for RN 0.79.5
-          npm install react-native-screens@latest
-      - name: Clean CocoaPods
+          # Clean everything and reinstall with forced react-native-screens 3.31.1
+          rm -rf node_modules ios/Pods ios/Podfile.lock
+          npm install
+      - name: Add C++17 settings to Podfile
         script: |
           cd ios
-          # Clean CocoaPods completely
-          rm -rf Pods
-          rm Podfile.lock
+          # Add C++17 settings to Podfile post_install
+          cat >> Podfile << 'EOF'
+          
+          post_install do |installer|
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                # Force C++17 for react-native-screens Objective-C++ sources
+                config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+                config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
+              end
+            end
+          end
+          EOF
+      - name: Install CocoaPods with C++17 settings
+        script: |
+          cd ios
           pod install --repo-update
       - name: Create ExportOptions.plist
         script: |
