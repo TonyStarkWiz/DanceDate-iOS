@@ -19,6 +19,16 @@ workflows:
       xcode: 15.2
       cocoapods: default
     scripts:
+      - name: Set environment overrides for C++17
+        script: |
+          # ☢️ NUKE SOLUTION: Force Xcode to prefer C++17 globally
+          export GCC_CXX_STANDARD=17
+          export CLANG_CXX_LANGUAGE_STANDARD=c++17
+          export CXXFLAGS="-std=c++17"
+          echo "🔧 Environment variables set to force C++17:"
+          echo "GCC_CXX_STANDARD=$GCC_CXX_STANDARD"
+          echo "CLANG_CXX_LANGUAGE_STANDARD=$CLANG_CXX_LANGUAGE_STANDARD"
+          echo "CXXFLAGS=$CXXFLAGS"
       - name: Install npm dependencies
         script: |
           npm install
@@ -49,40 +59,42 @@ workflows:
           rm -rf ~/Library/Caches/CocoaPods
           # Reinstall with forced react-native-screens 3.31.1
           npm install
-      - name: Verify react-native-screens version and C++17 settings
+      - name: Verify nuke solution C++17 settings
         script: |
           cd ios
           # Check react-native-screens version
           echo "📦 Checking react-native-screens version:"
           npm list react-native-screens
-          # Check if C++17 settings are present in Podfile for RNScreens
-          if grep -q "target.name == 'RNScreens'" Podfile; then
-            echo "✅ RNScreens-specific C++17 settings found in Podfile"
-            grep -A 10 "target.name == 'RNScreens'" Podfile
+          # Check if global C++17 nuke settings are present in Podfile
+          if grep -q "NUKE SOLUTION" Podfile; then
+            echo "✅ Global C++17 nuke settings found in Podfile"
+            grep -A 10 "NUKE SOLUTION" Podfile
           else
-            echo "⚠️ RNScreens-specific C++17 settings not found in Podfile"
+            echo "⚠️ Global C++17 nuke settings not found in Podfile"
           fi
-      - name: Install CocoaPods with C++17 settings
+      - name: Install CocoaPods with global C++17 nuke settings
         script: |
           cd ios
-          # Install Pods with the updated Podfile that forces C++17 for RNScreens
+          # Install Pods with the updated Podfile that forces C++17 for ALL pods
           pod install --repo-update
-          # Verify the Podfile changes were applied
-          echo "🔍 Verifying Podfile C++17 settings were applied:"
-          if grep -q "target.name == 'RNScreens'" Podfile; then
-            echo "✅ Podfile contains RNScreens-specific C++17 settings"
-            # Show the actual C++17 settings in the Podfile
-            grep -A 8 "target.name == 'RNScreens'" Podfile
+          # Verify the nuke solution was applied
+          echo "🔍 Verifying global C++17 nuke settings were applied:"
+          if grep -q "NUKE SOLUTION" Podfile; then
+            echo "✅ Podfile contains global C++17 nuke settings"
+            # Show the actual nuke settings in the Podfile
+            grep -A 8 "NUKE SOLUTION" Podfile
           else
-            echo "❌ Podfile missing RNScreens-specific C++17 settings"
+            echo "❌ Podfile missing global C++17 nuke settings"
           fi
-          # Verify the settings were actually applied to the Pods project
-          echo "🔍 Checking if C++17 settings were applied to RNScreens target:"
+          # Verify the settings were actually applied to ALL Pods targets
+          echo "🔍 Checking if C++17 nuke settings were applied to ALL Pods:"
           if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
-            if grep -q "CLANG_CXX_LANGUAGE_STANDARD.*c\+\+17" Pods/Pods.xcodeproj/project.pbxproj; then
-              echo "✅ C++17 settings found in Pods project"
+            cpp17_count=$(grep -c "CLANG_CXX_LANGUAGE_STANDARD.*c\+\+17" Pods/Pods.xcodeproj/project.pbxproj || echo "0")
+            echo "✅ Found $cpp17_count C++17 settings in Pods project"
+            if [ "$cpp17_count" -gt "0" ]; then
+              echo "✅ Global C++17 nuke solution successfully applied"
             else
-              echo "⚠️ C++17 settings not found in Pods project"
+              echo "⚠️ No C++17 settings found in Pods project"
             fi
           fi
       - name: Create ExportOptions.plist
