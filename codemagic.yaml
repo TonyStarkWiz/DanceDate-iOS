@@ -18,15 +18,19 @@ workflows:
       node: 18.20.4
       xcode: 15.2
       cocoapods: default
-
     scripts:
-      - name: Install npm dependencies
+      - name: Set environment overrides for C++17
         script: |
-          npm install
+          export GCC_CXX_STANDARD=17
+          export CLANG_CXX_LANGUAGE_STANDARD=gnu++17
+          export CXXFLAGS="-std=gnu++17"
+          echo "🔧 Environment variables set for C++17"
+
+      - name: Install npm dependencies
+        script: npm install
 
       - name: Install Expo CLI
-        script: |
-          npm install -g @expo/cli
+        script: npm install -g @expo/cli
 
       - name: Create missing assets
         script: |
@@ -34,25 +38,20 @@ workflows:
           touch assets/sounds/notification.wav
 
       - name: Expo prebuild
-        script: |
-          npx expo prebuild --platform ios --clean
+        script: npx expo prebuild --platform ios --clean
 
       - name: Install CocoaPods dependencies
         script: |
           cd ios && pod install --repo-update
 
       - name: Clean Xcode DerivedData
-        script: |
-          rm -rf ~/Library/Developer/Xcode/DerivedData/*
+        script: rm -rf ~/Library/Developer/Xcode/DerivedData/*
 
-      - name: Nuclear clean of all build artifacts
+      - name: Reinstall Pods before archive
         script: |
-          rm -rf ~/Library/Developer/Xcode/DerivedData/*
-          cd ios && rm -rf Pods Podfile.lock build
-          rm -rf node_modules
-          rm -rf ~/Library/Caches/com.apple.dt.Xcode
-          rm -rf ~/Library/Caches/CocoaPods
-          npm install
+          cd ios
+          rm -rf Pods Podfile.lock
+          pod install --repo-update
 
       - name: Create ExportOptions.plist
         script: |
@@ -79,29 +78,27 @@ workflows:
       - name: Fix iOS deployment targets
         script: |
           cd ios
-          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*;/IPHONEOS_DEPLOYMENT_TARGET = 13.0;/g' {} \;
+          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} \;
 
-      - name: Set up code signing settings
+      - name: Set up code signing settings on Xcode project
         script: |
           cd ios
           xcode-project use-profiles
-
-      - name: Final clean before archive
-        script: |
-          rm -rf ~/Library/Developer/Xcode/DerivedData/*
-          rm -rf ~/Library/Caches/com.apple.dt.Xcode
-          rm -rf ~/Library/Caches/CocoaPods
 
       - name: Build ipa for distribution
         script: |
           cd ios
           xcodebuild clean -workspace "$XCODE_WORKSPACE" -scheme "$XCODE_SCHEME" -configuration Release
+
           xcodebuild archive \
             -workspace "$XCODE_WORKSPACE" \
             -scheme "$XCODE_SCHEME" \
             -configuration Release \
             -archivePath DanceDate.xcarchive \
+            -xcconfig "Pods/Target Support Files/Pods-DanceDate/Pods-DanceDate.release.xcconfig" \
             DEVELOPMENT_TEAM=RZ3LX2QC88 \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="DanceDate iOS App Store" \
             CODE_SIGN_STYLE=Automatic \
             -allowProvisioningUpdates \
             COMPILER_INDEX_STORE_ENABLE=NO \
