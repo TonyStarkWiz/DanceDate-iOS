@@ -66,11 +66,13 @@ workflows:
             echo "🔧 Patching RNScreens.podspec to hard-code C++17 settings..."
             # Backup original podspec
             cp node_modules/react-native-screens/RNScreens.podspec node_modules/react-native-screens/RNScreens.podspec.backup
-            # Add C++17 settings to podspec
-            sed -i '' '/s.pod_target_xcconfig = {/a\
-  "CLANG_CXX_LANGUAGE_STANDARD" => "c++17",\
+            # Create a temporary file with the C++17 settings
+            cat > /tmp/cpp17_settings.rb << 'EOF'
+  "CLANG_CXX_LANGUAGE_STANDARD" => "c++17",
   "CLANG_CXX_LIBRARY" => "libc++"
-' node_modules/react-native-screens/RNScreens.podspec
+EOF
+            # Add C++17 settings to podspec
+            sed -i '' '/s.pod_target_xcconfig = {/r /tmp/cpp17_settings.rb' node_modules/react-native-screens/RNScreens.podspec
             echo "✅ RNScreens.podspec patched with C++17 settings"
             # Verify the patch was applied
             if grep -q "CLANG_CXX_LANGUAGE_STANDARD.*c++17" node_modules/react-native-screens/RNScreens.podspec; then
