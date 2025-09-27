@@ -43,22 +43,16 @@ workflows:
           # Clean everything and reinstall with forced react-native-screens 3.31.1
           rm -rf node_modules ios/Pods ios/Podfile.lock
           npm install
-      - name: Add C++17 settings to Podfile
+      - name: Verify Podfile has C++17 settings
         script: |
           cd ios
-          # Add C++17 settings to Podfile post_install
-          cat >> Podfile << 'EOF'
-          
-          post_install do |installer|
-            installer.pods_project.targets.each do |target|
-              target.build_configurations.each do |config|
-                # Force C++17 for react-native-screens Objective-C++ sources
-                config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
-                config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
-              end
-            end
-          end
-          EOF
+          # Verify that Podfile already has C++17 settings merged into existing post_install
+          if ! grep -q "CLANG_CXX_LANGUAGE_STANDARD.*c++17" Podfile; then
+            echo "❌ C++17 settings not found in Podfile"
+            exit 1
+          else
+            echo "✅ C++17 settings found in Podfile"
+          fi
       - name: Install CocoaPods with C++17 settings
         script: |
           cd ios
