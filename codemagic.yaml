@@ -43,32 +43,14 @@ workflows:
           # Clean everything and reinstall with forced react-native-screens 3.31.1
           rm -rf node_modules ios/Pods ios/Podfile.lock
           npm install
-      - name: Verify Podfile has C++17 settings
+      - name: Check Podfile C++17 settings
         script: |
           cd ios
-          # Verify that Podfile already has C++17 settings merged into existing post_install
-          if ! grep -q "CLANG_CXX_LANGUAGE_STANDARD.*=.*'c++17'" Podfile; then
-            echo "❌ C++17 settings not found in Podfile"
-            echo "Looking for: CLANG_CXX_LANGUAGE_STANDARD = 'c++17'"
-            echo "Current Podfile content:"
-            cat Podfile
-            echo "Adding C++17 settings to Podfile post_install block..."
-            # Create a temporary file with C++17 settings
-            cat > /tmp/cpp17_settings.rb << 'EOF'
-    # Force C++17 for react-native-screens Objective-C++ sources
-    installer.pods_project.targets.each do |target|
-      target.build_configurations.each do |config|
-        config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
-        config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
-      end
-    end
-EOF
-            # Insert the C++17 settings before the end of post_install block
-            sed -i '' '/^  end$/r /tmp/cpp17_settings.rb' Podfile
-            rm /tmp/cpp17_settings.rb
-            echo "✅ C++17 settings added to Podfile post_install block"
-          else
+          # Check if C++17 settings are present in Podfile
+          if grep -q "CLANG_CXX_LANGUAGE_STANDARD.*=.*'c++17'" Podfile; then
             echo "✅ C++17 settings found in Podfile"
+          else
+            echo "⚠️ C++17 settings not found in Podfile - relying on existing settings"
           fi
       - name: Install CocoaPods with C++17 settings
         script: |
