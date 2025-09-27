@@ -1,49 +1,29 @@
 workflows:
-  ios-release:
-    name: iOS Release Build
-    max_build_duration: 120
+  ios-testflight:
+    name: DanceDate iOS TestFlight Deploy
     environment:
-      vars:
-        XCODE_WORKSPACE: "DanceDate.xcworkspace"
-        XCODE_SCHEME: "DanceDate"
-        BUNDLE_ID: "com.antho.dancedate"
+      groups:
+        - app_store_connect
       ios_signing:
         certificates:
           - DD_iOS_AppStore_Distribution2
         provisioning_profiles:
           - DanceDate iOS App Store
-      groups:
-        - app_store_connect
     scripts:
       - name: Install dependencies
         script: |
           npm install
-          cd ios
-          pod install --repo-update
-          cd ..
-      - name: Build IPA
+          cd ios && pod install --repo-update && cd ..
+      - name: Build iOS IPA
         script: |
-          xcodebuild \
-            -workspace "$XCODE_WORKSPACE" \
-            -scheme "$XCODE_SCHEME" \
-            -configuration Release \
-            -archivePath $CM_BUILD_DIR/ios/DanceDate.xcarchive \
-            archive DEVELOPMENT_TEAM=RZ3LX2QC88 \
-            CODE_SIGN_STYLE=Manual \
-            PROVISIONING_PROFILE_SPECIFIER="DanceDate iOS App Store" \
-            CODE_SIGN_IDENTITY="Apple Distribution"
-          xcodebuild \
-            -exportArchive \
-            -archivePath $CM_BUILD_DIR/ios/DanceDate.xcarchive \
-            -exportOptionsPlist ios/exportOptions.plist \
-            -exportPath $CM_BUILD_DIR/ios/output
+          xcode-project build-ipa \
+            --workspace "ios/DanceDate.xcworkspace" \
+            --scheme "DanceDate" \
+            --config Release
     artifacts:
-      - ios/output/*.ipa
-      - ios/output/*.dSYM.zip
+      - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
         api_key: $APPSTORE_PRIVATE_KEY
         key_id: $APPSTORE_KEY_ID
         issuer_id: $APPSTORE_ISSUER_ID
-        submit_to_testflight: true
-        submit_to_app_store: false
