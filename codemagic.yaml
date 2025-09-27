@@ -2,21 +2,20 @@ workflows:
   ios-release:
     name: iOS Release Build
     environment:
+      vars:
+        XCODE_WORKSPACE: "DanceDate.xcworkspace"
+        XCODE_SCHEME: "DanceDate"
       ios_signing:
-        distribution_type: app_store
-        bundle_identifier: "com.antho.dancedate"
         certificates:
           - DD_iOS_AppStore_Distribution2
         provisioning_profiles:
           - DanceDate iOS App Store
-      vars:
-        XCODE_WORKSPACE: "DanceDate.xcworkspace"
-        XCODE_SCHEME: "DanceDate"
     scripts:
       - name: Install dependencies
         script: |
           npm install
           npx pod-install ios
+
       - name: Build iOS Release
         script: |
           xcodebuild \
@@ -26,6 +25,7 @@ workflows:
             -sdk iphoneos \
             -archivePath $CM_BUILD_DIR/DanceDate.xcarchive \
             archive DEVELOPMENT_TEAM=RZ3LX2QC88 CODE_SIGN_STYLE=Manual
+
       - name: Export .ipa
         script: |
           xcodebuild \
@@ -33,12 +33,14 @@ workflows:
             -archivePath $CM_BUILD_DIR/DanceDate.xcarchive \
             -exportOptionsPlist ios/exportOptions.plist \
             -exportPath $CM_BUILD_DIR
+
     artifacts:
       - $CM_BUILD_DIR/*.ipa
       - $CM_BUILD_DIR/*.dSYM.zip
+
     publishing:
       app_store_connect:
-        api_key: $APPSTORE_KEY_ID
-        issuer_id: $APPSTORE_ISSUER_ID
-        private_key: $APPSTORE_PRIVATE_KEY
+        key_id: $APPSTORE_KEY_ID          # GitHub secret
+        issuer_id: $APPSTORE_ISSUER_ID    # GitHub secret
+        private_key: $APPSTORE_PRIVATE_KEY # GitHub secret
         submit_to_testflight: true
