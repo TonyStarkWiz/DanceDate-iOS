@@ -35,12 +35,17 @@ workflows:
       - name: Install CocoaPods dependencies
         script: |
           cd ios && pod install --repo-update
-      - name: Temporarily remove react-native-screens
+      - name: Clean Xcode DerivedData
+        script: |
+          rm -rf ~/Library/Developer/Xcode/DerivedData/*
+      - name: Align react-native-screens version
+        script: |
+          # Update react-native-screens to compatible version for RN 0.79.5
+          npm install react-native-screens@latest
+      - name: Clean CocoaPods
         script: |
           cd ios
-          # Remove react-native-screens from Podfile to avoid compilation errors
-          sed -i '' '/react-native-screens/d' Podfile
-          # Clean and reinstall pods without react-native-screens
+          # Clean CocoaPods completely
           rm -rf Pods
           rm Podfile.lock
           pod install --repo-update
