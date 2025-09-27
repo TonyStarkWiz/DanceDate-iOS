@@ -38,17 +38,25 @@ workflows:
       - name: Clean Xcode DerivedData
         script: |
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
-      - name: Force Xcode 15 compatible react-native-screens version
+      - name: Full clean rebuild to prevent cached settings
         script: |
-          # Clean everything and reinstall with forced react-native-screens 3.31.1
+          # Complete clean of all build artifacts and caches
           rm -rf node_modules ios/Pods ios/Podfile.lock
+          rm -rf ~/Library/Developer/Xcode/DerivedData/*
+          rm -rf ~/Library/Caches/com.apple.dt.Xcode
+          rm -rf ~/Library/Caches/CocoaPods
+          # Reinstall with forced react-native-screens 3.31.1
           npm install
-      - name: Check Podfile C++17 settings for RNScreens
+      - name: Verify react-native-screens version and C++17 settings
         script: |
           cd ios
+          # Check react-native-screens version
+          echo "📦 Checking react-native-screens version:"
+          npm list react-native-screens
           # Check if C++17 settings are present in Podfile for RNScreens
           if grep -q "target.name == 'RNScreens'" Podfile; then
             echo "✅ RNScreens-specific C++17 settings found in Podfile"
+            grep -A 10 "target.name == 'RNScreens'" Podfile
           else
             echo "⚠️ RNScreens-specific C++17 settings not found in Podfile"
           fi
@@ -87,11 +95,14 @@ workflows:
         script: |
           cd ios
           xcode-project use-profiles
-      - name: Clean DerivedData before archive
+      - name: Final clean before archive
         script: |
+          # Final cleanup to ensure no cached build settings
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
-          # Also clean any cached build settings
           rm -rf ~/Library/Caches/com.apple.dt.Xcode
+          rm -rf ~/Library/Caches/CocoaPods
+          # Verify clean state
+          echo "🧹 Cleanup complete - no cached build settings should remain"
       - name: Build ipa for distribution
         script: |
           cd ios
