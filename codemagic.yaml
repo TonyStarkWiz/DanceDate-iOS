@@ -38,11 +38,13 @@ workflows:
       - name: Clean Xcode DerivedData
         script: |
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
-      - name: Full clean rebuild to prevent cached settings
+      - name: Clean Codemagic caches and stale Pods
         script: |
-          # Complete clean of all build artifacts and caches
-          rm -rf node_modules ios/Pods ios/Podfile.lock
+          # Clean DerivedData and stale Pods to ensure Podfile changes apply
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
+          rm -rf ios/Pods ios/Podfile.lock
+          # Complete clean of all build artifacts and caches
+          rm -rf node_modules
           rm -rf ~/Library/Caches/com.apple.dt.Xcode
           rm -rf ~/Library/Caches/CocoaPods
           # Reinstall with forced react-native-screens 3.31.1
@@ -63,7 +65,15 @@ workflows:
       - name: Install CocoaPods with C++17 settings
         script: |
           cd ios
+          # Install Pods with the updated Podfile that forces C++17 for RNScreens
           pod install --repo-update
+          # Verify the Podfile changes were applied
+          echo "🔍 Verifying Podfile C++17 settings were applied:"
+          if grep -q "target.name == 'RNScreens'" Podfile; then
+            echo "✅ Podfile contains RNScreens-specific C++17 settings"
+          else
+            echo "❌ Podfile missing RNScreens-specific C++17 settings"
+          fi
       - name: Create ExportOptions.plist
         script: |
           cd ios
