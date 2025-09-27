@@ -38,9 +38,9 @@ workflows:
       - name: Clean Xcode DerivedData
         script: |
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
-      - name: Force compatible react-native-screens version
+      - name: Force Xcode 15 compatible react-native-screens version
         script: |
-          # Clean everything and reinstall with forced react-native-screens 3.27.2
+          # Clean everything and reinstall with forced react-native-screens 3.31.1
           rm -rf node_modules ios/Pods ios/Podfile.lock
           npm install
       - name: Check Podfile C++17 settings for RNScreens
@@ -90,6 +90,8 @@ workflows:
       - name: Clean DerivedData before archive
         script: |
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
+          # Also clean any cached build settings
+          rm -rf ~/Library/Caches/com.apple.dt.Xcode
       - name: Build ipa for distribution
         script: |
           cd ios
