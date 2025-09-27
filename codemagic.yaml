@@ -87,6 +87,9 @@ workflows:
         script: |
           cd ios
           xcode-project use-profiles
+      - name: Clean DerivedData before archive
+        script: |
+          rm -rf ~/Library/Developer/Xcode/DerivedData/*
       - name: Build ipa for distribution
         script: |
           cd ios
