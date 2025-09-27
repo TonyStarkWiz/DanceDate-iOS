@@ -71,8 +71,19 @@ workflows:
           echo "🔍 Verifying Podfile C++17 settings were applied:"
           if grep -q "target.name == 'RNScreens'" Podfile; then
             echo "✅ Podfile contains RNScreens-specific C++17 settings"
+            # Show the actual C++17 settings in the Podfile
+            grep -A 8 "target.name == 'RNScreens'" Podfile
           else
             echo "❌ Podfile missing RNScreens-specific C++17 settings"
+          fi
+          # Verify the settings were actually applied to the Pods project
+          echo "🔍 Checking if C++17 settings were applied to RNScreens target:"
+          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
+            if grep -q "CLANG_CXX_LANGUAGE_STANDARD.*c\+\+17" Pods/Pods.xcodeproj/project.pbxproj; then
+              echo "✅ C++17 settings found in Pods project"
+            else
+              echo "⚠️ C++17 settings not found in Pods project"
+            fi
           fi
       - name: Create ExportOptions.plist
         script: |
