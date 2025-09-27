@@ -18,26 +18,42 @@ workflows:
       node: 18.20.4
       xcode: 15.2
       cocoapods: default
+
     scripts:
       - name: Install npm dependencies
         script: |
           npm install
+
       - name: Install Expo CLI
         script: |
           npm install -g @expo/cli
+
       - name: Create missing assets
         script: |
           mkdir -p assets/sounds
           touch assets/sounds/notification.wav
+
       - name: Expo prebuild
         script: |
           npx expo prebuild --platform ios --clean
+
       - name: Install CocoaPods dependencies
         script: |
           cd ios && pod install --repo-update
+
       - name: Clean Xcode DerivedData
         script: |
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
+
+      - name: Nuclear clean of all build artifacts
+        script: |
+          rm -rf ~/Library/Developer/Xcode/DerivedData/*
+          cd ios && rm -rf Pods Podfile.lock build
+          rm -rf node_modules
+          rm -rf ~/Library/Caches/com.apple.dt.Xcode
+          rm -rf ~/Library/Caches/CocoaPods
+          npm install
+
       - name: Create ExportOptions.plist
         script: |
           cd ios
@@ -59,20 +75,23 @@ workflows:
           </dict>
           </plist>
           EOF
+
       - name: Fix iOS deployment targets
         script: |
           cd ios
-          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 13.0/' {} \;
-      - name: Set up code signing settings on Xcode project
+          find . -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*;/IPHONEOS_DEPLOYMENT_TARGET = 13.0;/g' {} \;
+
+      - name: Set up code signing settings
         script: |
           cd ios
           xcode-project use-profiles
+
       - name: Final clean before archive
         script: |
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
           rm -rf ~/Library/Caches/com.apple.dt.Xcode
           rm -rf ~/Library/Caches/CocoaPods
-          echo "🧹 Final cleanup complete"
+
       - name: Build ipa for distribution
         script: |
           cd ios
@@ -87,15 +106,21 @@ workflows:
             -allowProvisioningUpdates \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_COMPILATION_MODE=wholemodule \
-            SWIFT_OPTIMIZATION_LEVEL=-O
+            SWIFT_OPTIMIZATION_LEVEL=-O \
+            OTHER_CPLUSPLUSFLAGS="-std=gnu++17" \
+            CLANG_CXX_LANGUAGE_STANDARD=gnu++17 \
+            CLANG_CXX_LIBRARY=libc++
+
           xcodebuild -exportArchive \
             -archivePath DanceDate.xcarchive \
             -exportPath exports \
             -exportOptionsPlist "$(pwd)/ExportOptions.plist"
+
     artifacts:
       - build/ios/ipa/*.ipa
       - ios/*.ipa
       - /tmp/xcodebuild_logs/*.log
+
     publishing:
       app_store_connect:
         auth: integration
