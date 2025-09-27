@@ -3,7 +3,7 @@ workflows:
     name: DanceDate iOS TestFlight Deploy
     environment:
       groups:
-        - app_store_credentials   # ✅ matches the group name in your screenshot
+        - app_store_credentials   # Matches your Codemagic group
       ios_signing:
         certificates:
           - DD_iOS_AppStore_Distribution2
@@ -19,7 +19,9 @@ workflows:
           xcode-project build-ipa \
             --workspace "ios/DanceDate.xcworkspace" \
             --scheme "DanceDate" \
-            --config Release
+            --config Release \
+            --archive-path build/DanceDate.xcarchive \
+            --export-method app-store   # ✅ tells Codemagic to export for App Store
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
